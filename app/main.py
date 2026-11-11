@@ -1,5 +1,9 @@
+from typing import Literal, Optional
+
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, condecimal, constr
 from app.agent import Agent
 from app.retriever import Retriever
 import json, os
@@ -13,9 +17,29 @@ agent = Agent(retriever=retriever)
 LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
+STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+
 class TaskRequest(BaseModel):
     task: str
     data: dict = {}
+
+class RefundRequest(BaseModel):
+    customer_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    transaction_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    amount: condecimal(gt=0, max_digits=10, decimal_places=2)
+    reason: Literal['damaged', 'not_received', 'duplicate_charge']
+    description: Optional[constr(max_length=1000)] = None
+
+@app.get('/', include_in_schema=False)
+async def index():
+    """Serve the browser UI."""
+    return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
+
+@app.post('/api/refund-requests')
+async def submit_refund_request(req: RefundRequest):
+    """Placeholder: validates the form fields only. Not connected to the agent yet."""
+    return {'message': 'Request received'}
 
 @app.post('/tasks')
 async def submit_task(req: TaskRequest):
