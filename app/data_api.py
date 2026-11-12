@@ -10,6 +10,7 @@ When Blake's branch is merged, require_admin below can be swapped for his.
 """
 import hmac
 import os
+import uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -19,6 +20,7 @@ from app.monitoring.audit import get_audit_log, SEVERITIES
 from app.monitoring.behavior import BehaviorMonitor
 from app.monitoring.detection import get_detector
 from app.rag import get_policy_store
+from app.records_agent import records_agent
 
 MIN_TOKEN = 16
 
@@ -49,6 +51,15 @@ class PolicyUpload(BaseModel):
 class PolicySearch(BaseModel):
     query: constr(min_length=1, max_length=1000)
     k: conint(ge=1, le=10) = 3
+
+
+class RecordsLookup(BaseModel):
+    customer_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    transaction_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    amount: constr(max_length=20) = '0.00'
+    reason: constr(max_length=40) = 'damaged'
+    description: constr(max_length=1000) = ''
+    task: constr(max_length=1000) = 'Look up the customer and transaction for this case.'
 
 
 class ScanRequest(BaseModel):
@@ -141,6 +152,17 @@ def detections(min_severity: Literal[SEVERITIES] = 'low', limit: conint(ge=1, le
 def run_monitor():
     """Run the behaviour rules over the audit log and return current alerts."""
     return BehaviorMonitor().run()
+
+
+# ------------------------------------------------------------------ records agent demo
+@router.post('/records/lookup')
+def records_lookup(body: RecordsLookup):
+    """Run the Records agent on a test case and show exactly what it would hand to the other agents.
+    The task field plays the planner's instruction, so injected text can be tried there."""
+    case_id = 'CASE-DEMO-' + uuid.uuid4().hex[:8]
+    req = body.dict()
+    task = req.pop('task')
+    return {'case_id': case_id, **records_agent(case_id, task, {'request': req})}
 
 
 # ------------------------------------------------------------------ audit / investigation

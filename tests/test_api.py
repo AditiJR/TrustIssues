@@ -94,3 +94,14 @@ def test_rt01_and_audit_verify_and_monitor(client):
     assert isinstance(client.post('/admin/monitor/run', headers=ADMIN).json(), list)
     case = client.get('/admin/audit?action=service_started', headers=ADMIN).json()
     assert case and case[0]['actor'] == 'service'
+
+
+def test_records_lookup_demo(client, payloads):
+    ok = client.post('/admin/records/lookup', headers=ADMIN, json={'customer_id': 'C-1', 'transaction_id': 'T-1002'})
+    assert ok.json()['status'] == 'ok' and ok.json()['record']['customer']['account_last4'] == '2333'
+    inj = client.post('/admin/records/lookup', headers=ADMIN, json={
+        'customer_id': 'C-1', 'transaction_id': 'T-1002', 'task': payloads['records_probes']['direct_other_customer']})
+    assert inj.json()['record']['task_flagged'] and 'C-2' not in inj.text and '000111222333' not in inj.text
+    other = client.post('/admin/records/lookup', headers=ADMIN, json={'customer_id': 'C-1', 'transaction_id': 'T-1003'})
+    assert other.json()['status'] == 'denied'
+    assert client.post('/admin/records/lookup', json={'customer_id': 'C-1', 'transaction_id': 'T-1002'}).status_code == 403
