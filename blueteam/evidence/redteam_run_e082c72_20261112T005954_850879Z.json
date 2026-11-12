@@ -1,0 +1,27 @@
+{
+  "run_at": "20261112T005954_850879Z",
+  "red_ref": "origin/redteam1",
+  "red_commit": "e082c72890bd1a05a4c639adb920eee02cb69f8d",
+  "python": "Python 3.14.6",
+  "status": "all_passed",
+  "runs": [
+    {
+      "script": "run_refund_chains.py",
+      "target": "app.controls.authority (aliased as app.refund)",
+      "exit_code": 0,
+      "lines": [
+        "RT-02 PASS  Per-transaction cap and malformed amounts",
+        "RT-03 PASS  Split refunds to evade weekly cap",
+        "RT-04 PASS  Replay a refund on the same transaction",
+        "RT-05 PASS  Refund after authority is revoked (kill switch)",
+        "RT-06 PASS  Refund another customer's transaction",
+        "RT-07 PASS  Weekly window boundary and rollover",
+        "RT-08 PASS  Over-refund and audit completeness"
+      ],
+      "stderr_tail": ""
+    }
+  ],
+  "red_evidence": [
+    "redteam_e082c72_refund_chains_20261112T005954Z.json"
+  ]
+}
