@@ -20,7 +20,7 @@ ADMIN = {'X-Admin-Token': TOKEN}
 
 
 @pytest.mark.parametrize('method,path', [('get', '/admin/policies'), ('post', '/admin/policies/search'),
-                                         ('get', '/admin/detections'), ('get', '/admin/audit/verify'),
+                                         ('get', '/admin/detections'), ('get', '/admin/events/verify'),
                                          ('post', '/admin/detect')])
 def test_admin_routes_need_token(client, method, path):
     r = client.request(method.upper(), path, headers={'X-Admin-Token': 'wrong-token-wrong-token'}, json={})
@@ -74,25 +74,27 @@ def test_tasks_still_work_one_entry_with_detection(client, payloads):
     """Starter /tasks: one log entry per call (RT-18), detection folded in, verdict not returned."""
     r = client.post('/tasks', json={'task': payloads['form_free_text']['direct_override'], 'data': {}})
     assert r.status_code == 200 and 'detection' not in json.dumps(r.json())
-    plan = [e for e in client.get('/logs').json() if e['action'] == 'plan_and_simulate']
+    plan = [e for e in client.get('/logs', headers=ADMIN).json() if e['action'] == 'plan_and_simulate']
     assert len(plan) == 1 and plan[0]['detection']['verdict'] == 'malicious' and plan[0]['severity'] == 'high'
     assert client.get('/admin/detections', headers=ADMIN).json()
 
 
 def test_logs_do_not_leak_customer_data(client, payloads):
-    """RT-19 passes by redaction even before /logs gets auth (Blake's branch adds that)."""
+    """RT-19: customer data is masked when written, so even an admin reading /logs does not see it."""
     c1 = payloads['customers']['C-1']
     client.post('/tasks', json={'task': 'refund to %s acct %s' % (c1['email'], c1['account_no']), 'data': {}})
-    body = client.get('/logs').text
+    resp = client.get('/logs', headers=ADMIN)
+    body = resp.text
+    assert resp.status_code == 200
     assert c1['email'] not in body and c1['account_no'] not in body
 
 
 def test_rt01_and_audit_verify_and_monitor(client):
     assert client.post('/tests/rt-01').json()['summary']['flagged_count'] == 2
-    v = client.get('/admin/audit/verify', headers=ADMIN).json()
+    v = client.get('/admin/events/verify', headers=ADMIN).json()
     assert v['ok'] and v['chained'] >= 2
     assert isinstance(client.post('/admin/monitor/run', headers=ADMIN).json(), list)
-    case = client.get('/admin/audit?action=service_started', headers=ADMIN).json()
+    case = client.get('/admin/events?action=service_started', headers=ADMIN).json()
     assert case and case[0]['actor'] == 'service'
 
 

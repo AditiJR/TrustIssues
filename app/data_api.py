@@ -1,4 +1,8 @@
-"""HTTP routes for the policy store, detection and the audit log (all admin-only).
+"""HTTP routes for the policy store, detection and the event log (all admin-only).
+
+Route names avoid the other branches: Blake has /admin/audit (refund decision audit),
+/admin/escalations and /admin/kill-switch. Sargis has /admin/kill-switch. This module uses
+/admin/policies, /admin/detect, /admin/detections, /admin/monitor, /admin/records and /admin/events.
 
 Mounted in app/main.py with app.include_router(router). Kept in its own module so it merges
 cleanly with the routes Blake (app/controls/http.py) and Sargis (kill switch) add to main.py.
@@ -166,14 +170,14 @@ def records_lookup(body: RecordsLookup):
 
 
 # ------------------------------------------------------------------ audit / investigation
-@router.get('/audit')
+@router.get('/events')
 def audit_events(case_id: Optional[str] = None, action: Optional[str] = None, min_severity: Optional[str] = None,
                  limit: conint(ge=1, le=5000) = 500):
     """Filtered audit events for an investigation, e.g. everything for one case."""
     return get_audit_log().read(case_id=case_id, action=action, min_severity=min_severity, limit=limit)
 
 
-@router.get('/audit/verify')
+@router.get('/events/verify')
 def verify_audit():
     """Hash-chain check of the event log. Keep the returned 'head' somewhere else to anchor it."""
     return get_audit_log().verify()

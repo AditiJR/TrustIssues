@@ -1,21 +1,19 @@
-"""Customer store: profiles, transactions and case history for the Records agent.
+"""Customer store: case history for the Records agent, on top of the team's customer records.
 
-Two kinds of data, kept apart on purpose:
+Where the data lives:
 
-  Structured rows (SQLite tables)   customer profile incl. the full bank account number, and
-                                    transactions. Used for exact lookups (ownership, last4).
-  Vectors (collections 'cases' and 'profiles')
-                                    case text and a short profile summary for RAG. Full account
-                                    numbers are never embedded: summaries carry only the last 4
-                                    digits, and case text is redacted before it is stored.
+  Customers and transactions   Blake's control database is the source of truth (team decision).
+                               This store reads it query-only through app/rag/records_source.py
+                               and never sees full account numbers. Until Blake's branch is merged,
+                               a local fallback with the same seed customers is used instead.
+  Vectors ('cases', 'profiles') case text for RAG, owned by this store. Full account numbers are
+                               never embedded: case text is redacted before it is stored, and profile
+                               summaries (local mode only) carry only the last 4 digits.
 
 Tenant isolation (RT-26, RT-29): both vector collections require a customer_id filter on every
 query. There is no method that searches across customers. Case text is scanned when it is stored
 and again when it is retrieved, and anything that carries instructions to the agent is not
 returned.
-
-The full account number leaves this module only through get_bank_account(), which logs every
-call. Only the refund payout (mock bank) should call it.
 """
 import hashlib
 import re
@@ -24,20 +22,12 @@ from datetime import datetime, timezone
 
 from app.monitoring.audit import get_audit_log, redact_text
 from app.monitoring.detection import get_detector
+from app.rag.records_source import pick_source
 
 CASES = 'cases'
 PROFILES = 'profiles'
 _ID = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
 MAX_CASE_TEXT = 4000
-
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS customers(
-  customer_id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL, account_no TEXT NOT NULL,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS transactions(
-  transaction_id TEXT PRIMARY KEY, customer_id TEXT NOT NULL REFERENCES customers(customer_id),
-  amount_cents INTEGER NOT NULL CHECK(amount_cents > 0), purchased_on TEXT NOT NULL, item TEXT NOT NULL);
-"""
 
 
 def _now():
@@ -49,11 +39,11 @@ def _valid_id(value):
 
 
 class CustomerStore:
-    def __init__(self, vector_store, detector=None, audit=None):
+    def __init__(self, vector_store, detector=None, audit=None, source=None):
         self.vs = vector_store
         self.detector = detector or get_detector()
         self._audit = audit
-        self.vs.conn.executescript(SCHEMA)
+        self.source = source or pick_source(vector_store.conn)
         self.vs.require_filter_on(CASES, 'customer_id')
         self.vs.require_filter_on(PROFILES, 'customer_id')
 
@@ -61,8 +51,14 @@ class CustomerStore:
     def audit(self):
         return self._audit or get_audit_log()
 
+    def _require_local(self, what):
+        if not self.source.writable:
+            raise PermissionError('%s lives in the control database (Blake\'s store). Change it there.' % what)
+
     # -------------------------------------------------------------- profiles
     def upsert_customer(self, customer_id, *, name, email, account_no, actor='admin'):
+        """Local fallback only. With the control database, customers are managed by Blake's store."""
+        self._require_local('customer data')
         if not _valid_id(customer_id):
             raise ValueError('bad customer_id')
         if not re.fullmatch(r'\d{6,17}', account_no or ''):
@@ -87,37 +83,33 @@ class CustomerStore:
         return self.get_profile(customer_id)
 
     def update_contact(self, customer_id, *, name=None, email=None, actor='admin'):
-        """Change non-financial profile fields. Bank details change only through upsert_customer (admin)."""
-        p = self._raw(customer_id)
+        """Change non-financial profile fields (local fallback only)."""
+        self._require_local('customer data')
+        p = self.source.raw_customer(customer_id) if _valid_id(customer_id) else None
         if p is None:
             raise KeyError('no such customer')
         return self.upsert_customer(customer_id, name=name or p['name'], email=email or p['email'],
                                     account_no=p['account_no'], actor=actor)
 
-    def _raw(self, customer_id):
+    def get_profile(self, customer_id):
+        """Profile safe for agents: customer_id, name (local only), email, account_last4. Never the full number."""
         if not _valid_id(customer_id):
             return None
-        row = self.vs.conn.execute('SELECT customer_id, name, email, account_no FROM customers WHERE customer_id = ?',
-                                   (customer_id,)).fetchone()
-        return dict(zip(['customer_id', 'name', 'email', 'account_no'], row)) if row else None
-
-    def get_profile(self, customer_id):
-        """Profile safe for agents: no full account number."""
-        p = self._raw(customer_id)
-        if p is None:
-            return None
-        return {'customer_id': p['customer_id'], 'name': p['name'], 'email': p['email'],
-                'account_last4': p['account_no'][-4:]}
+        return self.source.get_customer(customer_id)
 
     def get_bank_account(self, customer_id, *, actor, purpose, case_id=None, decision_id=None):
-        """Full account number for paying out an approved refund. Every call is logged."""
-        p = self._raw(customer_id)
+        """Full account number for a payout, local fallback only. With the control database this returns
+        None: the payout goes through Blake's mock bank. Every call is logged either way."""
+        acct = self.source.bank_account(customer_id) if _valid_id(customer_id) else None
         self.audit.log(actor, 'bank_account_access', severity='medium', case_id=case_id, decision_id=decision_id,
-                       customer_id=customer_id, purpose=str(purpose)[:80], found=p is not None)
-        return p['account_no'] if p else None
+                       customer_id=customer_id, purpose=str(purpose)[:80], found=acct is not None,
+                       source=self.source.name)
+        return acct
 
     # -------------------------------------------------------------- transactions
     def add_transaction(self, transaction_id, customer_id, amount_cents, *, purchased_on, item):
+        """Local fallback only."""
+        self._require_local('transaction data')
         if not (_valid_id(transaction_id) and _valid_id(customer_id)):
             raise ValueError('bad id')
         with self.vs._lock:
@@ -127,18 +119,14 @@ class CustomerStore:
     def get_transaction(self, transaction_id):
         if not _valid_id(transaction_id):
             return None
-        row = self.vs.conn.execute('SELECT transaction_id, customer_id, amount_cents, purchased_on, item FROM transactions '
-                                   'WHERE transaction_id = ?', (transaction_id,)).fetchone()
-        return dict(zip(['transaction_id', 'customer_id', 'amount_cents', 'purchased_on', 'item'], row)) if row else None
+        return self.source.get_transaction(transaction_id)
 
     def owns(self, customer_id, transaction_id):
         t = self.get_transaction(transaction_id)
         return bool(t and t['customer_id'] == customer_id)
 
     def transactions_for(self, customer_id):
-        rows = self.vs.conn.execute('SELECT transaction_id, amount_cents, purchased_on, item FROM transactions '
-                                    'WHERE customer_id = ? ORDER BY transaction_id', (customer_id,)).fetchall()
-        return [dict(zip(['transaction_id', 'amount_cents', 'purchased_on', 'item'], r)) for r in rows]
+        return self.source.transactions_for(customer_id) if _valid_id(customer_id) else []
 
     # -------------------------------------------------------------- cases
     def add_case(self, customer_id, transaction_id, text, *, case_id=None, reason=None, amount=None, status='open',
@@ -156,7 +144,7 @@ class CustomerStore:
             return existing
         text = (text or '').strip()[:MAX_CASE_TEXT] or '(no description)'
         scan = self.detector.scan_input(text, source='case_text', case_id=case_id, customer_id=customer_id,
-                                        allowed_emails=[self._raw(customer_id)['email']],
+                                        allowed_emails=[self.get_profile(customer_id)['email']],
                                         allowed_transactions=[transaction_id])
         body = 'Refund case %s for transaction %s. Reason: %s. Amount: %s.\n%s' % (
             case_id, transaction_id, reason or 'unspecified', amount if amount is not None else 'unspecified',

@@ -8,13 +8,14 @@ Everything here is standard library only (SQLite plus Python), runs offline and 
 | Vector DB | `app/rag/vectorstore.py` | SQLite store with embeddings and metadata. Filters run in SQL before similarity scoring, and a collection can require a filter (tenant isolation). |
 | Embedder | `app/rag/embedder.py` | Offline hashing embedder (default, deterministic). Optional sentence-transformers backend with `TRUSTISSUES_EMBEDDER=sbert`. |
 | Policy store | `app/rag/policy_store.py` | Admin uploads are chunked, scanned, embedded and versioned. Bad chunks are quarantined. Retrieval uses only the latest approved version and returns provenance. |
-| Customer store | `app/rag/customer_store.py` | Profiles, transactions and case history. Every case search must name a customer. Full account numbers are never embedded. |
+| Customer store | `app/rag/customer_store.py` | Case history for RAG. Every case search must name a customer. Full account numbers are never embedded. |
+| Records source | `app/rag/records_source.py` | Reads customers and transactions from Blake's control database (team decision). Falls back to local seed data until his branch is merged. |
 | Retriever | `app/retriever.py` | Replaces the starter's keyword lookup with policy-store search. Same `get_context()` signature, so `app/agent.py` is unchanged. |
 | Records agent | `app/records_agent.py` | `records_agent(case_id, task, case)`, same signature as the entries in Sargis's `AGENT_REGISTRY`. |
 | Audit log | `app/monitoring/audit.py` | Shared, hash-chained, redacting log. Same file and keys as the starter's `logs/events.jsonl`. |
 | Detection | `app/monitoring/detection.py` | Scans input, retrieved chunks and outbound text. Rules map to OWASP LLM and ASI ids and MAESTRO layers. |
 | Behaviour rules | `app/monitoring/behavior.py` | Alerts from patterns across events: repeated attacks, record enumeration, refund splitting, action after revoke, floods, log tampering. |
-| Admin routes | `app/data_api.py` | `/admin/policies`, `/admin/detect`, `/admin/detections`, `/admin/monitor/run`, `/admin/audit`, `/admin/audit/verify` |
+| Admin routes | `app/data_api.py` | `/admin/policies`, `/admin/detect`, `/admin/detections`, `/admin/monitor/run`, `/admin/records/lookup`, `/admin/events`, `/admin/events/verify` |
 
 ## Running
 
@@ -28,11 +29,17 @@ python blueteam/data_and_detection/run_detection_eval.py    # evidence for the r
 ```
 
 The first start creates `logs/rag.db` and seeds the refund policy (`app/rag/seed/refund_policy.md`)
-and four synthetic customers (`app/rag/seed/customers.json`). C-1, C-2 and T-1001 to T-1009 match
-the red team fixtures and Blake's control store. Delete `logs/rag.db` to re-seed.
+and past cases. Delete `logs/rag.db` to re-seed.
+
+Customers and transactions come from Blake's control database (`logs/controls.db`, or
+`TRUSTISSUES_CONTROL_DB`), which the team chose as the single source of truth. This branch reads it
+query-only and never selects the full account number. Until Blake's branch is merged that file does
+not exist, so the app falls back to local seed data (`app/rag/seed/customers.json`, the same C-1, C-2
+and T-1001 to T-1009 plus C-3 and C-4). `TRUSTISSUES_RECORDS_SOURCE=control` or `local` forces one.
 
 Environment variables: `TRUSTISSUES_EVENT_LOG` (default `logs/events.jsonl`),
-`TRUSTISSUES_RAG_DB` (default `logs/rag.db`), `TRUSTISSUES_ADMIN_TOKEN`, `TRUSTISSUES_EMBEDDER`.
+`TRUSTISSUES_RAG_DB` (default `logs/rag.db`), `TRUSTISSUES_CONTROL_DB` (Blake's, default `logs/controls.db`),
+`TRUSTISSUES_RECORDS_SOURCE` (auto, control or local), `TRUSTISSUES_ADMIN_TOKEN`, `TRUSTISSUES_EMBEDDER`.
 
 ## Admin API (header `X-Admin-Token`)
 
@@ -47,8 +54,11 @@ Environment variables: `TRUSTISSUES_EVENT_LOG` (default `logs/events.jsonl`),
 | `POST /admin/detect` `{text, mode, customer_id?}` | Run the detector on any text (`mode` is input, retrieved or output) |
 | `GET /admin/detections?min_severity=` | Detections, DLP hits, quarantines, alerts and refused admin calls |
 | `POST /admin/monitor/run` | Run the behaviour rules now and return alerts |
-| `GET /admin/audit?case_id=&action=` | Events for an investigation, for example everything on one case |
-| `GET /admin/audit/verify` | Check the hash chain. Keep the returned `head` somewhere else to anchor it. |
+| `POST /admin/records/lookup` `{customer_id, transaction_id, task?, description?}` | Run the Records agent on a test case. Put injected text in `task` to show it cannot widen the scope. |
+| `GET /admin/events?case_id=&action=` | Events for an investigation, for example everything on one case |
+| `GET /admin/events/verify` | Check the hash chain. Keep the returned `head` somewhere else to anchor it. |
+
+These names avoid the other branches. `/admin/audit` is Blake's refund decision audit, and `/admin/kill-switch` belongs to Blake and Sargis.
 
 ## For Sargis (orchestrator)
 
@@ -91,6 +101,20 @@ critical `BEH-ACTION-AFTER-REVOKE` alert.
 
 ## For Blake (enforcement)
 
+Your control database is the source of truth for customers and transactions. This branch reads its
+`customers` (customer_id, email, account_last4 only) and `transactions` tables query-only, and never
+writes them. Checked on a test merge of both branches: your `open_case` and `records_for` feed the
+Records agent, and closing the case makes the agent return denied.
+
+Things to settle at merge time (both are in tests or views, no data leaks):
+* `test_logs_need_admin_and_are_redacted` looks for `[redacted-email]` in `/logs`. The event log already
+  masks emails when it writes them (`c***@shop.example.test`), so there is nothing left for your marker.
+  Checking that the raw email is absent would pass with both layers.
+* The `/logs` read-time redaction turns the hex `hash` and `prev_hash` fields into `[redacted-number]`
+  in that view. The file on disk is fine and `/admin/events/verify` still checks it.
+* Your seed data has C-1 with `account_last4` 4401 but `account_no` 000111222333 (ends in 2333). Same
+  for C-2 (7702 vs 5666). The red team fixture copies this. Worth making them match.
+
 * Retrieved chunks already have the shape your `filter_chunks()` expects: `customer_id` and
   `transaction_id` at the top level and under `metadata`. Policy chunks are tagged `customer_id: None`.
 * The Records agent uses your gateway when `case['records_gateway'] = gate.records_for(scope)` is set.
@@ -100,8 +124,8 @@ critical `BEH-ACTION-AFTER-REVOKE` alert.
   against your constants. Until then it uses $100 and $500.
 * `BehaviorMonitor().run(extra_events=gate.admin(token).read_audit())` also reads your audit rows
   (`kind`, `outcome`, `at_us`).
-* The mock bank should call `customer_store.get_bank_account(customer_id, actor='mock-bank', purpose='refund payout', decision_id=...)`.
-  It is the only place the full account number comes out, and every call is logged.
+* Payouts stay in your mock bank. With your database as the source, `customer_store.get_bank_account()`
+  returns None (it is only a local fallback), so the full account number never passes through this side.
 * `app/data_api.py` has its own `require_admin` with your convention (`X-Admin-Token`, 16 or more
   characters, `hmac.compare_digest`). Swap in yours when merging. I left `GET /logs` alone because
   your branch already adds auth there.
@@ -156,7 +180,7 @@ mark clean but that comes from an untrusted source.
 * Behaviour alerts do not trigger the kill switch automatically, so a flood of fake alerts cannot become a
   denial of service. An admin or the orchestrator decides.
 * The hash chain detects edited, removed, inserted or reordered lines. It cannot detect lines cut from the
-  end, or a whole log rewritten by someone with write access. Store the `head` from `/admin/audit/verify`
+  end, or a whole log rewritten by someone with write access. Store the `head` from `/admin/events/verify`
   elsewhere (for example in each evidence file) to anchor it.
 * The default embedder is not a neural model. It was chosen because it works offline and keeps evidence
   reproducible. Retrieval quality is good enough for one short policy, and the sbert option is there if the
