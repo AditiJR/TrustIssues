@@ -45,3 +45,12 @@ python run_demo.py --base-url http://localhost:8000 --start-server
 **Notes & safety:** The script only calls local endpoints in this starter repo and redacts obvious tokens before saving evidence. Do not use `--start-server` on production systems.
 
 ---
+
+## Data, retrieval and detection (Blue: Vaishnavi)
+
+- Use Python 3.10 to 3.12. The pinned pydantic 1.10 does not run on 3.13.
+- Set `TRUSTISSUES_ADMIN_TOKEN` (16+ characters) before starting the server to enable the `/admin/*` routes.
+- The first start creates `logs/rag.db` with the seed refund policy and synthetic customers.
+- Tests: `pip install -r requirements-dev.txt` then `python -m pytest -q`.
+- Detection evidence: `python blueteam/data_and_detection/run_detection_eval.py`.
+- Details and integration notes: `blueteam/data_and_detection/README.md`.
