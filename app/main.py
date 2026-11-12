@@ -4,7 +4,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, condecimal, constr
-from app.agent import Agent
+from app.agent import Agent, Planner
+from app.killswitch import KillSwitch
+from app.orchestrator import Orchestrator
 from app.retriever import Retriever
 import json, os
 
@@ -13,6 +15,8 @@ app = FastAPI(title='Capstone Starter Agent - Safe Demo')
 # Simple components
 retriever = Retriever()
 agent = Agent(retriever=retriever)
+kill_switch = KillSwitch()
+orchestrator = Orchestrator(planner=Planner(), kill_switch=kill_switch)
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -37,9 +41,27 @@ async def index():
     return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
 
 @app.post('/api/refund-requests')
-async def submit_refund_request(req: RefundRequest):
-    """Placeholder: validates the form fields only. Not connected to the agent yet."""
-    return {'message': 'Request received'}
+def submit_refund_request(req: RefundRequest):
+    """checks the form, then hands the case to the orchestrator.
+
+    plain def on purpose, not async, so FastAPI runs the slow LLM call in a worker thread.
+    """
+    request = req.dict()
+    request['amount'] = str(request['amount'])  # Decimal -> str, otherwise json can't log it
+    return orchestrator.handle_refund_request(request)
+
+class RevokeRequest(BaseModel):
+    reason: constr(strip_whitespace=True, min_length=1, max_length=200) = 'manual revoke'
+
+@app.get('/admin/kill-switch')
+def kill_switch_status():
+    return kill_switch.status()
+
+@app.post('/admin/kill-switch/revoke')
+def revoke_agent(req: RevokeRequest = RevokeRequest()):
+    """revokes the orchestrator's authority. only a server restart turns it back on.
+    TODO: lock this to the admin role once we have logins."""
+    return orchestrator.revoke_authority(req.reason)
 
 @app.post('/tasks')
 async def submit_task(req: TaskRequest):
