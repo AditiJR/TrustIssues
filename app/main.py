@@ -1,11 +1,13 @@
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, condecimal, constr
 from app.agent import Agent
 from app.retriever import Retriever
+from app.controls import gate
+from app.controls.http import install_controls, redact, refund_response, require_admin
 import json, os
 
 app = FastAPI(title='Capstone Starter Agent - Safe Demo')
@@ -19,6 +21,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+
+# Admin-only endpoints (X-Admin-Token header) and the controls' error handlers
+install_controls(app)
 
 class TaskRequest(BaseModel):
     task: str
@@ -38,8 +43,9 @@ async def index():
 
 @app.post('/api/refund-requests')
 async def submit_refund_request(req: RefundRequest):
-    """Placeholder: validates the form fields only. Not connected to the agent yet."""
-    return {'message': 'Request received'}
+    """Ownership check, then limit control ($100 per refund, $500 per week), in code. Every outcome is audited."""
+    decision = gate.handle_refund_form(req.customer_id, req.transaction_id, req.amount, req.reason, req.description)
+    return refund_response(decision)
 
 @app.post('/tasks')
 async def submit_task(req: TaskRequest):
@@ -51,7 +57,7 @@ async def submit_task(req: TaskRequest):
         f.write(json.dumps(entry) + '\n')
     return {'status': 'ok', 'result': result}
 
-@app.get('/logs')
+@app.get('/logs', dependencies=[Depends(require_admin)])
 async def get_logs():
     path = os.path.join(LOG_DIR, 'events.jsonl')
     if not os.path.exists(path):
@@ -60,7 +66,7 @@ async def get_logs():
     with open(path) as f:
         for line in f:
             out.append(json.loads(line))
-    return out
+    return redact(out)
 
 @app.post('/tests/rt-01')
 async def run_rt01():
