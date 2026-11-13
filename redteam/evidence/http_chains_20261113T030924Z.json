@@ -1,0 +1,181 @@
+{
+  "run_at": "20261113T030924Z",
+  "target": "app.main over HTTP (in-process TestClient)",
+  "git": {
+    "commit": "58db2ce09954f241854086a69a7daa8c9a738f1e",
+    "dirty": false
+  },
+  "results": [
+    {
+      "id": "RT-34",
+      "name": "Unauthorized kill-switch restore",
+      "control_held": true,
+      "detail": {
+        "problems": [],
+        "attempts_total": 29,
+        "attempts_that_restored": 0,
+        "status_codes": [
+          "403",
+          "404",
+          "405",
+          "422"
+        ],
+        "kill_related_routes": [
+          "/admin/kill-switch"
+        ],
+        "refused_admin_attempts_audited": 15,
+        "token_in_audit": false,
+        "audit_chain_ok": true,
+        "control_restore_worked": true,
+        "control_refund_after_restore": "approved",
+        "attempts": [
+          {
+            "attempt": "no token",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "empty token",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "wrong token",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token minus last char",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token plus a char",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token uppercased",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token with leading space",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token with trailing space",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token with non-ascii lookalike",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token in query string",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token in body field",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token as bearer header",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "token in cookie",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "PUT on the route",
+            "status": 405,
+            "still_revoked": true
+          },
+          {
+            "attempt": "PATCH on the route",
+            "status": 405,
+            "still_revoked": true
+          },
+          {
+            "attempt": "DELETE on the route",
+            "status": 405,
+            "still_revoked": true
+          },
+          {
+            "attempt": "GET on the route",
+            "status": 405,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant /admin/kill-switch/",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant //admin/kill-switch",
+            "status": 404,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant /ADMIN/kill-switch",
+            "status": 404,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant /admin/kill-switch/restore",
+            "status": 404,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant /admin/kill-switch/revoke",
+            "status": 404,
+            "still_revoked": true
+          },
+          {
+            "attempt": "path variant /admin/%6Bill-switch",
+            "status": 403,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged as the string \"false\"",
+            "status": 422,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged as 0",
+            "status": 422,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged as null",
+            "status": 422,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged as an empty list",
+            "status": 422,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged as \"no\"",
+            "status": 422,
+            "still_revoked": true
+          },
+          {
+            "attempt": "valid token, engaged missing",
+            "status": 422,
+            "still_revoked": true
+          }
+        ]
+      }
+    }
+  ]
+}
