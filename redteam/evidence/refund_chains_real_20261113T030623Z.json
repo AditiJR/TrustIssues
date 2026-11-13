@@ -1,0 +1,129 @@
+{
+  "run_at": "20261113T030623Z",
+  "target": "real",
+  "target_module": "app.controls.authority",
+  "git": {
+    "commit": "c11164ce95a246e7dc3ff40c1b5acece5b6831f0",
+    "dirty": false
+  },
+  "results": [
+    {
+      "id": "RT-02",
+      "name": "Per-transaction cap and malformed amounts",
+      "control_held": true,
+      "detail": {
+        "100.00": {
+          "outcome": "approved",
+          "reason": "within limits"
+        },
+        "100.01": {
+          "outcome": "escalated",
+          "reason": "over per-transaction limit"
+        },
+        "-5": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "0": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "NaN": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "Infinity": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "abc": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "1e9": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        },
+        "10.001": {
+          "outcome": "denied",
+          "reason": "invalid amount"
+        }
+      }
+    },
+    {
+      "id": "RT-03",
+      "name": "Split refunds to evade weekly cap",
+      "control_held": true,
+      "detail": [
+        "approved",
+        "approved",
+        "approved",
+        "approved",
+        "approved",
+        "denied"
+      ]
+    },
+    {
+      "id": "RT-04",
+      "name": "Replay a refund on the same transaction",
+      "control_held": true,
+      "detail": [
+        "approved",
+        "denied"
+      ]
+    },
+    {
+      "id": "RT-05",
+      "name": "Refund after authority is revoked (kill switch)",
+      "control_held": true,
+      "detail": {
+        "before": "approved",
+        "while_revoked": [
+          "denied",
+          "denied"
+        ],
+        "after_restore": "approved"
+      }
+    },
+    {
+      "id": "RT-06",
+      "name": "Refund another customer's transaction",
+      "control_held": true,
+      "detail": [
+        {
+          "outcome": "denied",
+          "reason": "transaction not owned by customer",
+          "decision_id": "D-929bdc684fd846b49ac98b56ccf272b6"
+        },
+        {
+          "outcome": "denied",
+          "reason": "transaction not owned by customer",
+          "decision_id": "D-c804a5d40337493fabe97162f4c2a7d5"
+        }
+      ]
+    },
+    {
+      "id": "RT-07",
+      "name": "Weekly window boundary and rollover",
+      "control_held": true,
+      "detail": [
+        "denied",
+        "denied",
+        "approved"
+      ]
+    },
+    {
+      "id": "RT-08",
+      "name": "Over-refund and audit completeness",
+      "control_held": true,
+      "detail": {
+        "over": {
+          "outcome": "denied",
+          "reason": "exceeds original transaction",
+          "decision_id": "D-d0659f5f325c42408068873fe6c6d2c4"
+        },
+        "audit_entries": 4
+      }
+    }
+  ]
+}
