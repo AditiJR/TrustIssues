@@ -1,7 +1,17 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from app.agent import Agent
+from typing import Literal, Optional
+
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, condecimal, constr
+from app.agent import Agent, Planner
+from app.orchestrator import Orchestrator
 from app.retriever import Retriever
+from app.controls import gate
+from app.controls.http import install_controls, redact, require_admin
+from app.data_api import router as data_router
+from app.monitoring.audit import AuditLog, SEVERITY_RANK
+from app.monitoring.detection import get_detector
 import json, os
 
 app = FastAPI(title='Capstone Starter Agent - Safe Demo')
@@ -9,25 +19,84 @@ app = FastAPI(title='Capstone Starter Agent - Safe Demo')
 # Simple components
 retriever = Retriever()
 agent = Agent(retriever=retriever)
+# the kill switch lives in Blake's controls (app.controls.gate), so it is shared with the limit control
+# and survives a restart. admin routes for it are POST /admin/kill-switch (see install_controls)
+orchestrator = Orchestrator(planner=Planner())
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
+
+STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
+app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+
+# Admin-only endpoints (X-Admin-Token header) and the controls' error handlers
+install_controls(app)
+
+# Admin routes for policies, detection and the audit log (app/data_api.py)
+app.include_router(data_router)
+
+
+def event_log():
+    """The shared hash-chained audit log, in LOG_DIR (read at call time so tests can redirect it)."""
+    return AuditLog(os.path.join(LOG_DIR, 'events.jsonl'))
+
+
+@app.on_event('startup')
+def _started():
+    event_log().log('service', 'service_started', authority_revoked=False)
 
 class TaskRequest(BaseModel):
     task: str
     data: dict = {}
 
+class RefundRequest(BaseModel):
+    customer_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    transaction_id: constr(strip_whitespace=True, min_length=1, max_length=64)
+    amount: condecimal(gt=0, max_digits=10, decimal_places=2)
+    reason: Literal['damaged', 'not_received', 'duplicate_charge']
+    description: Optional[constr(max_length=1000)] = None
+
+@app.get('/', include_in_schema=False)
+async def index():
+    """Serve the browser UI."""
+    return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
+
+@app.post('/api/refund-requests')
+def submit_refund_request(req: RefundRequest):
+    """form -> input scan -> orchestrator -> (ownership via the gate) -> records and refunds agents -> limit control.
+
+    plain def on purpose, not async, so FastAPI runs the slow LLM call in a worker thread.
+    """
+    # the description is written by the customer: scan it before the planner or any agent sees it
+    scan = get_detector().scan_input(req.description or '', source='form', customer_id=req.customer_id,
+                                     allowed_transactions=[req.transaction_id])
+    if scan.recommended_action == 'quarantine':
+        # attack-like text: nothing is planned or refunded. the finding is in the audit log (/admin/detections)
+        # TODO: there is no review queue for quarantined requests yet, only the detections list
+        return {'status': 'quarantined', 'outcome': 'escalated', 'steps': [],
+                'message': 'Your request needs review by an administrator. You will hear back by email.'}
+    request = req.dict()
+    request['amount'] = str(request['amount'])  # Decimal -> str, otherwise json can't log it
+    result = orchestrator.handle_refund_request(request)
+    if result['status'] == 'unavailable':
+        raise HTTPException(status_code=503, detail='try again later')
+    return result
+
 @app.post('/tasks')
 async def submit_task(req: TaskRequest):
     """Submit a task to the agent. This will PLAN and SIMULATE execution (no real side-effects)."""
+    # untrusted input: scan before the agent sees it. The verdict goes into this request's one log
+    # entry (with a matching severity), and is not returned to the caller.
+    scan = get_detector().scan_input(req.task + '\n' + json.dumps(req.data), source='task', log=False,
+                                     customer_id=req.data.get('customer_id') if isinstance(req.data, dict) else None)
     result = agent.handle_task(req.task, req.data)
-    # write a log entry
-    entry = {'timestamp': agent.now_iso(), 'actor': 'agent', 'action': 'plan_and_simulate', 'task': req.task, 'result': result}
-    with open(os.path.join(LOG_DIR, 'events.jsonl'), 'a') as f:
-        f.write(json.dumps(entry) + '\n')
+    event_log().log('agent', 'plan_and_simulate', task=req.task, result=result,
+                    severity=max((f.severity for f in scan.findings), key=SEVERITY_RANK.get, default='info'),
+                    detection={'verdict': scan.verdict, 'rule_ids': scan.rule_ids, 'risk_score': scan.risk_score,
+                               'owasp': sorted({o for f in scan.findings for o in f.owasp})})
     return {'status': 'ok', 'result': result}
 
-@app.get('/logs')
+@app.get('/logs', dependencies=[Depends(require_admin)])
 async def get_logs():
     path = os.path.join(LOG_DIR, 'events.jsonl')
     if not os.path.exists(path):
@@ -36,7 +105,7 @@ async def get_logs():
     with open(path) as f:
         for line in f:
             out.append(json.loads(line))
-    return out
+    return redact(out)
 
 @app.post('/tests/rt-01')
 async def run_rt01():
@@ -55,7 +124,6 @@ async def run_rt01():
     with open(os.path.join(evidence_dir, 'rt-01-results.json'), 'w') as f:
         json.dump(results, f, indent=2)
     # log event
-    entry = {'timestamp': agent.now_iso(), 'actor': 'redteam', 'action': 'rt-01-hallucination-sim', 'result_summary': {'flagged_count': sum(1 for r in results if r['flagged'])}}
-    with open(os.path.join(LOG_DIR, 'events.jsonl'), 'a') as f:
-        f.write(json.dumps(entry) + '\n')
+    entry = event_log().log('redteam', 'rt-01-hallucination-sim',
+                            result_summary={'flagged_count': sum(1 for r in results if r['flagged'])})
     return {'status':'ok', 'summary': entry['result_summary']}

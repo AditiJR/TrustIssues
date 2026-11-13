@@ -1,0 +1,723 @@
+{
+  "run_at": "20261112T005951_079109Z",
+  "label": "before",
+  "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+  "python": "3.14.6",
+  "tree": {
+    "controls_sha256": "c5455c0287fc421dadf8d9dda8d2214e65886381d2d1dde6bbd6f982e380d239",
+    "git_commit": "30af79e9a5f107043b5b50e516e0d698928ecf58",
+    "git_dirty": false
+  },
+  "note": "pass = control held",
+  "summary": {
+    "pass": 2,
+    "fail": 12,
+    "blocked": 10
+  },
+  "results": [
+    {
+      "id": "BT-F01a",
+      "name": "Two requests on one transaction, forced to overlap: exactly one refund",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-09"
+      ],
+      "finding": "F01",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.022474+00:00",
+      "raw_sha256": "f7c13f0c61d1f6afed7a339c69dcf0db86384718966d39b08f11937897a73e9b",
+      "detail": [
+        {
+          "approved": 2,
+          "issued_rows": 2,
+          "returned": 6,
+          "errors": [],
+          "reasons": [
+            "transaction already refunded",
+            "within limits"
+          ]
+        },
+        {
+          "approved": 2,
+          "issued_rows": 2,
+          "returned": 6,
+          "errors": [],
+          "reasons": [
+            "transaction already refunded",
+            "within limits"
+          ]
+        },
+        {
+          "approved": 2,
+          "issued_rows": 2,
+          "returned": 6,
+          "errors": [],
+          "reasons": [
+            "transaction already refunded",
+            "within limits"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "BT-F01b",
+      "name": "Concurrent requests on distinct transactions: weekly total never above $500, every request answered and audited",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-09"
+      ],
+      "finding": "F01",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.023721+00:00",
+      "raw_sha256": "763898bbc92e0a37dc1f19a3ca8ef3a22628aa9a8b0e3583ba3ff6e2cd0c32dd",
+      "detail": {
+        "max_issued_cents_in_window": 77000,
+        "rounds": [
+          {
+            "returned": 8,
+            "errors": [],
+            "audit_rows": 8,
+            "reasons": [
+              "within limits"
+            ]
+          },
+          {
+            "returned": 8,
+            "errors": [],
+            "audit_rows": 8,
+            "reasons": [
+              "within limits"
+            ]
+          },
+          {
+            "returned": 8,
+            "errors": [],
+            "audit_rows": 8,
+            "reasons": [
+              "within limits"
+            ]
+          },
+          {
+            "returned": 8,
+            "errors": [],
+            "audit_rows": 8,
+            "reasons": [
+              "within limits"
+            ]
+          },
+          {
+            "returned": 8,
+            "errors": [],
+            "audit_rows": 8,
+            "reasons": [
+              "within limits"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "BT-F02",
+      "name": "Kill switch engaged during a request: no refund is issued after revocation",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-05",
+        "RT-12"
+      ],
+      "finding": "F02",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.063616+00:00",
+      "raw_sha256": "bc9745c74cb90852a3a8d8340211e8afcef4f8d949782ec29c6e82af9097790f",
+      "detail": {
+        "outcome": "approved",
+        "revoked": true,
+        "issued_rows": 1
+      }
+    },
+    {
+      "id": "BT-F03",
+      "name": "Malformed inputs are denied and audited, never raised",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-02"
+      ],
+      "finding": "F03",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.063649+00:00",
+      "raw_sha256": "b6d00dfe8923735f182820647396db05b859dc0bd5d839317a41873e195a563a",
+      "detail": [
+        {
+          "input": "'str:1e26'",
+          "outcome": "RAISED InvalidOperation",
+          "audit_added": 0
+        },
+        {
+          "input": "'str:99999999999999999999'",
+          "outcome": "RAISED InvalidOperation",
+          "audit_added": 0
+        },
+        {
+          "input": "'str:1E+400'",
+          "outcome": "RAISED InvalidOperation",
+          "audit_added": 0
+        },
+        {
+          "input": "'str:10.00'",
+          "outcome": "RAISED TypeError",
+          "audit_added": 0
+        },
+        {
+          "input": "'str:10.00'",
+          "outcome": "RAISED TypeError",
+          "audit_added": 0
+        },
+        {
+          "input": "'int:<unprintable>'",
+          "outcome": "RAISED ValueError",
+          "audit_added": 0
+        },
+        {
+          "input": "'Boom:<unprintable>'",
+          "outcome": "RAISED RuntimeError",
+          "audit_added": 0
+        },
+        {
+          "input": "'NoneType:None'",
+          "outcome": "denied",
+          "audit_added": 1
+        },
+        {
+          "input": "'float:100.0'",
+          "outcome": "approved",
+          "audit_added": 1
+        },
+        {
+          "input": "'str: 50 '",
+          "outcome": "denied",
+          "audit_added": 1
+        },
+        {
+          "input": "'str:\\uff15\\uff10'",
+          "outcome": "denied",
+          "audit_added": 1
+        },
+        {
+          "input": "'str:1_0'",
+          "outcome": "denied",
+          "audit_added": 1
+        },
+        {
+          "input": "'str:50\\n'",
+          "outcome": "denied",
+          "audit_added": 1
+        },
+        {
+          "input": "'str:10.00'",
+          "outcome": "denied",
+          "audit_added": 1
+        }
+      ]
+    },
+    {
+      "id": "BT-F04",
+      "name": "Restart keeps the weekly total, replay guard and kill switch",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [],
+      "finding": "F04",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.063846+00:00",
+      "raw_sha256": "f8ddebb79197739666e8893196e07007cb73269ae5823dfef6ed62917b6de68f",
+      "detail": {
+        "first": [
+          "approved",
+          "approved",
+          "approved",
+          "approved",
+          "approved"
+        ],
+        "replay_after_restart": "approved",
+        "sixth_after_restart": "approved",
+        "revoked_after_restart": false
+      }
+    },
+    {
+      "id": "BT-F05",
+      "name": "Agent-reachable surface cannot restore authority; non-boolean argument fails closed",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-11"
+      ],
+      "finding": "F05",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.064069+00:00",
+      "raw_sha256": "f98def9bd4b6d095aa9e9e344d5c55e1fe81649c7cda4991a9058c6cd5ed2bfd",
+      "detail": {
+        "attribute_write": "accepted",
+        "after_attribute_write": "approved",
+        "falsy_arg_revoked": false
+      }
+    },
+    {
+      "id": "BT-F06",
+      "name": "Limits and ledger cannot be changed by callers",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-11",
+        "RT-13"
+      ],
+      "finding": "F06",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Low",
+      "at": "2026-11-12T00:59:51.064089+00:00",
+      "raw_sha256": "e8dbe75343a14f1700170cfcd2e6defa180e8953d37bb10d30f2a623ee02ce2d",
+      "detail": {
+        "after_rebinding_module_limits": "approved",
+        "after_editing_ledger_dict": "approved",
+        "issued_clear": "accepted",
+        "after_clearing_issued": "approved"
+      }
+    },
+    {
+      "id": "BT-F07",
+      "name": "Audit rows: decision id returned, serialisable, bounded raw input, tamper-evident",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-08",
+        "RT-18"
+      ],
+      "finding": "F07",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.064151+00:00",
+      "raw_sha256": "6cb0fb3853c6da36ccc52c4307d40e8709acd6134f619328382cdc82ae5bfacc",
+      "detail": {
+        "decision_id_returned": false,
+        "serialisable": true,
+        "audit_bytes": 100211,
+        "serialisable_with_bytes_id": false,
+        "clear": "accepted",
+        "entries_after_clear_attempt": 0
+      }
+    },
+    {
+      "id": "BT-F08",
+      "name": "A clock that fails at any point never leaves a refund without an audit row",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [],
+      "finding": "F08",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Low",
+      "at": "2026-11-12T00:59:51.064588+00:00",
+      "raw_sha256": "e8b19d8d344cb545608cae9ef224b2f07afaea036e06b12948c5094e4f220734",
+      "detail": [
+        {
+          "clock_fails_at_call": 1,
+          "outcome": "RAISED RuntimeError",
+          "issued_rows": 0,
+          "approved_audit_rows": 0,
+          "audit_rows": 0
+        },
+        {
+          "clock_fails_at_call": 2,
+          "outcome": "RAISED RuntimeError",
+          "issued_rows": 0,
+          "approved_audit_rows": 0,
+          "audit_rows": 0
+        },
+        {
+          "clock_fails_at_call": 3,
+          "outcome": "RAISED RuntimeError",
+          "issued_rows": 1,
+          "approved_audit_rows": 0,
+          "audit_rows": 0
+        },
+        {
+          "clock_fails_at_call": 4,
+          "outcome": "approved",
+          "issued_rows": 1,
+          "approved_audit_rows": 1,
+          "audit_rows": 1
+        }
+      ]
+    },
+    {
+      "id": "BT-F09",
+      "name": "Clock misuse: naive datetime is denied and audited; clock is not a public attribute",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [],
+      "finding": "F09",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Low",
+      "at": "2026-11-12T00:59:51.064623+00:00",
+      "raw_sha256": "2c2f29895eea9464876b04a71c0b505bddecf706243e45678e840900f078cc45",
+      "detail": {
+        "naive_clock": "approved",
+        "after_public_now_overwrite": "approved"
+      }
+    },
+    {
+      "id": "BT-F10",
+      "name": "Escalation is persisted, deduplicated, and the only path for that transaction",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-14"
+      ],
+      "finding": "F10",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Low",
+      "at": "2026-11-12T00:59:51.064664+00:00",
+      "raw_sha256": "94141a8452d937b5f672b48d3eb63e9bd90dfa49956e54f2a3ad8fd573219130",
+      "detail": {
+        "first": "escalated",
+        "repeat": "escalated",
+        "same_txn_under_limit_while_pending": "approved",
+        "reasons": [
+          "over per-transaction limit",
+          "over per-transaction limit",
+          "within limits"
+        ]
+      }
+    },
+    {
+      "id": "BT-P01",
+      "name": "Random operation sequences keep every limit invariant (seeded)",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-02",
+        "RT-03",
+        "RT-04",
+        "RT-05",
+        "RT-06",
+        "RT-07"
+      ],
+      "finding": null,
+      "status": "pass",
+      "control_held": true,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.064678+00:00",
+      "raw_sha256": "b037a9b3f6ee3d07d1e7c83baf08370a278f756c8e082cb3a5bd527402ba5a00",
+      "detail": {
+        "seeds": [
+          0,
+          39
+        ],
+        "steps": 2400,
+        "weekly_denials": 51,
+        "violations": [],
+        "violation_count": 0
+      }
+    },
+    {
+      "id": "BT-P02",
+      "name": "Amount fuzz: only plain ASCII money strings can be approved; nothing raises (seeded)",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-02"
+      ],
+      "finding": "F03",
+      "status": "fail",
+      "control_held": false,
+      "severity": "Medium",
+      "at": "2026-11-12T00:59:51.070572+00:00",
+      "raw_sha256": "19d8cc4f15ebbfe1feebd1d1ec29503ecac341ebb1a3f89650daef0eb3c9e889",
+      "detail": {
+        "seed": 1234,
+        "cases": 3000,
+        "violations": [
+          [
+            "'2\\u0665'",
+            "approved"
+          ],
+          [
+            "'5_\\uff11'",
+            "approved"
+          ],
+          [
+            "'\\uff11e+52'",
+            "RAISED InvalidOperation"
+          ],
+          [
+            "'+5'",
+            "approved"
+          ],
+          [
+            "'544E+5_4'",
+            "RAISED InvalidOperation"
+          ],
+          [
+            "'2\\n'",
+            "approved"
+          ],
+          [
+            "'84E66\\u0665_4'",
+            "RAISED InvalidOperation"
+          ],
+          [
+            "'\\n80'",
+            "approved"
+          ]
+        ],
+        "violation_count": 131
+      }
+    },
+    {
+      "id": "BT-LIM01",
+      "name": "Limit boundaries on a fixed clock: $100.00 / $100.01, $500.00 / $500.01, 7 days exactly / 7 days + 1 microsecond",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-02",
+        "RT-03",
+        "RT-04",
+        "RT-07"
+      ],
+      "finding": null,
+      "status": "pass",
+      "control_held": true,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078838+00:00",
+      "raw_sha256": "f538e397beca76cb9cd5f3dd39a11989f988e42f686d291150af0bdbe810b77f",
+      "detail": {
+        "100.00": [
+          "approved",
+          "within limits"
+        ],
+        "100.01": [
+          "escalated",
+          "over per-transaction limit"
+        ],
+        "replay": [
+          "denied",
+          "transaction already refunded"
+        ],
+        "to_400": [
+          "approved",
+          "approved",
+          "approved"
+        ],
+        "499.99": [
+          "approved",
+          "within limits"
+        ],
+        "500.00": [
+          "approved",
+          "within limits"
+        ],
+        "500.01": [
+          "denied",
+          "weekly limit reached"
+        ],
+        "at_7_days_exactly": [
+          "denied",
+          "weekly limit reached"
+        ],
+        "at_7_days_plus_1us": [
+          "approved",
+          "within limits"
+        ]
+      }
+    },
+    {
+      "id": "BT-AC01",
+      "name": "Records gateway releases only the case customer, never account_no; a foreign transaction opens no case",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-06",
+        "RT-28",
+        "RT-31"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078902+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-AC02",
+      "name": "Forged, guessed or revoked scope is denied and logged; a scope cannot be used for another transaction",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-28",
+        "RT-12"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078910+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-AC03",
+      "name": "Retrieval post-filter keeps only policy text and this case: other customers, other transactions, untagged chunks and account numbers are dropped",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-26",
+        "RT-29",
+        "RT-31"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078916+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-AC04",
+      "name": "A case scope expires after 30 minutes; a closed scope stops working for records and refunds",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-12",
+        "RT-28"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078922+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-GATE01",
+      "name": "Service path: form request is scoped, limited, audited; every denial looks the same to the customer; admin needs the exact token",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-06",
+        "RT-10",
+        "RT-11",
+        "RT-19",
+        "RT-28"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078927+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-ESC01",
+      "name": "Admin decisions: admin only, final, bounded by the weekly cap, refused while revoked",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-14",
+        "RT-24"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078932+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-AUD01",
+      "name": "Every state change writes exactly one audit row; edits and deletions are refused and detected",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-08",
+        "RT-18"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078935+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-FAIL01",
+      "name": "Hostile text cannot wedge the store: the kill switch still engages, the audit stays readable, later requests work",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-05",
+        "RT-12",
+        "RT-18"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078940+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-FAIL02",
+      "name": "Store locked by another writer: refunds are denied and logged to the fallback file, and the kill switch still stops this process",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-05",
+        "RT-08"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078944+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    },
+    {
+      "id": "BT-BANK01",
+      "name": "Bank path: one payout per transaction even when the bank reply is lost; the reservation keeps counting",
+      "target": "baseline app/refund.py at origin/redteam1 (e082c72)",
+      "covers": [
+        "RT-04",
+        "RT-12"
+      ],
+      "finding": null,
+      "status": "blocked",
+      "control_held": null,
+      "severity": null,
+      "at": "2026-11-12T00:59:51.078947+00:00",
+      "raw_sha256": "7035028cc8036b989cfd7d126e5df3a982e71f774522934d14ca03936b53be8f",
+      "detail": {
+        "depends_on": "app.controls (not present in baseline)"
+      }
+    }
+  ]
+}

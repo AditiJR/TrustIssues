@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TrustIssues - Refund Request</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f4f5f7;
+      color: #1f2328;
+      /* TEMP JOKE: remove before submission (also delete app/static/omfgdogs.gif) */
+      /* first path works via the server, second when the file is opened directly */
+      background-image: url("/static/omfgdogs.gif"), url("omfgdogs.gif");
+      background-repeat: repeat;
+      min-height: 100vh;
+    }
+    .notice {
+      background: #fff4ce;
+      border-bottom: 1px solid #e0c96b;
+      padding: 12px 16px;
+      text-align: center;
+      font-size: 14px;
+    }
+    /* TEMP LOGO: concept only, replace with the final logo */
+    .site-header {
+      background: #fff;
+      border-bottom: 1px solid #d0d7de;
+      padding: 8px 16px;
+      text-align: center;
+    }
+    .site-header img {
+      display: block;
+      margin: 0 auto;
+      width: min(420px, 100%);
+      height: auto;
+    }
+    main {
+      max-width: 520px;
+      margin: 32px auto;
+      padding: 24px;
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+    }
+    h1 { margin-top: 0; font-size: 22px; }
+    label { display: block; margin-top: 16px; font-weight: 600; font-size: 14px; }
+    .optional { font-weight: 400; color: #656d76; }
+    input, select, textarea {
+      width: 100%;
+      margin-top: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    button {
+      margin-top: 20px;
+      padding: 10px 18px;
+      font: inherit;
+      font-weight: 600;
+      color: #fff;
+      background: #1f6feb;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: default; }
+    #result { margin-top: 16px; padding: 10px 12px; border-radius: 6px; }
+    #result.ok { background: #dafbe1; border: 1px solid #4ac26b; }
+    #result.error { background: #ffebe9; border: 1px solid #ff8182; }
+    #result.pending { background: #f6f8fa; border: 1px solid #d0d7de; }
+    #result .meta { margin-top: 6px; font-size: 13px; color: #656d76; }
+    #result ol { margin: 10px 0 0; padding-left: 20px; font-size: 13px; }
+    #result li { margin-top: 6px; }
+    #result .agent { font-weight: 600; text-transform: capitalize; }
+  </style>
+</head>
+<body>
+  <div class="notice" role="note">
+    You are interacting with an AI agent. Your refund request will be reviewed by an automated system.
+  </div>
+
+  <!-- TEMP LOGO: concept only. second path is for when the file is opened directly. -->
+  <header class="site-header">
+    <img src="/static/temp_logo.png" alt="TrustIssues"
+         onerror="this.onerror=null; this.src='temp_logo.png';">
+  </header>
+
+  <main>
+    <h1>Refund Request</h1>
+
+    <form id="refund-form">
+      <label for="customer_id">Customer ID</label>
+      <input id="customer_id" name="customer_id" type="text" required>
+
+      <label for="transaction_id">Transaction ID</label>
+      <input id="transaction_id" name="transaction_id" type="text" required>
+
+      <label for="amount">Refund amount (USD)</label>
+      <input id="amount" name="amount" type="number" min="0.01" step="0.01" required>
+
+      <label for="reason">Reason</label>
+      <select id="reason" name="reason" required>
+        <option value="">Select a reason</option>
+        <option value="damaged">Damaged</option>
+        <option value="not_received">Not received</option>
+        <option value="duplicate_charge">Duplicate charge</option>
+      </select>
+
+      <label for="description">Description <span class="optional">(optional)</span></label>
+      <textarea id="description" name="description" maxlength="1000"></textarea>
+
+      <button type="submit">Submit request</button>
+    </form>
+
+    <div id="result" hidden></div>
+  </main>
+
+  <script>
+    const form = document.getElementById("refund-form");
+    const result = document.getElementById("result");
+    const button = form.querySelector("button");
+
+    // textContent only, never innerHTML. step text comes from the customer and the LLM, so it could have html in it
+    function el(tag, text, className) {
+      const node = document.createElement(tag);
+      if (text !== undefined) node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+
+    function showResult(message, kind) {
+      result.replaceChildren(el("div", message));
+      result.className = kind;
+      result.hidden = false;
+    }
+
+    // approved / escalated / denied comes from the limit control, not from the agents
+    const OUTCOME_CLASS = { approved: "ok", escalated: "pending", denied: "error", pending: "pending" };
+
+    function showCase(body) {
+      const outcome = body.outcome || "denied";
+      const decision = el("div", `Decision: ${outcome}`);
+      decision.style.fontWeight = "600";
+      result.replaceChildren(decision, el("div", body.message));
+      const meta = [];
+      if (body.reference) meta.push(`Reference ${body.reference}`);
+      if (body.case_id) meta.push(`Case ${body.case_id}`);
+      if (meta.length) result.append(el("div", meta.join(" · "), "meta"));
+      if (body.steps && body.steps.length) {
+        const list = el("ol");
+        for (const step of body.steps) {
+          const item = el("li");
+          item.append(el("span", step.agent, "agent"), ` — ${step.task}`);
+          item.append(el("div", step.result.output, "meta"));
+          list.append(item);
+        }
+        result.append(list);
+      }
+      result.className = OUTCOME_CLASS[outcome] || "error";
+      result.hidden = false;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      showResult("Processing your request…", "pending");
+
+      const data = new FormData(form);
+      const payload = {
+        customer_id: data.get("customer_id").trim(),
+        transaction_id: data.get("transaction_id").trim(),
+        amount: Number(data.get("amount")),
+        reason: data.get("reason"),
+        description: data.get("description").trim() || null,
+      };
+
+      try {
+        const response = await fetch("/api/refund-requests", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = await response.json();
+        if (response.ok) {
+          showCase(body);
+          if (body.outcome === "approved" || body.outcome === "escalated") form.reset();
+        } else {
+          showResult("The request could not be submitted. Please check the fields and try again.", "error");
+        }
+      } catch (err) {
+        showResult("Could not reach the server. Please try again.", "error");
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
