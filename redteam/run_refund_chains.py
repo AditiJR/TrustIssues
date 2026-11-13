@@ -1,18 +1,40 @@
 #!/usr/bin/env python3
 """Red-team attack chains against refund authority and revocation (RT-02..RT-08).
 
-Runs in-process against app.refund (synthetic data, no network). Each chain
-records PASS when the control held. Evidence goes to redteam/results/refund_chains_<ts>.json.
+Runs in-process (synthetic data, no network). Each chain records PASS when the control held.
 
-Usage (from repo root): python redteam/run_refund_chains.py
+Target (--target):
+  real     (default) app.controls.authority, a test facade over the Blue team's real limit control
+  standin  app/refund.py, the Red team's original stand-in (kept only to compare against)
+The target and the git commit are written into the evidence so a result can be traced to code.
+
+Evidence goes to redteam/evidence/refund_chains_<target>_<ts>.json (a tracked folder, unlike redteam/results/).
+
+Usage (from repo root): python redteam/run_refund_chains.py [--target real|standin]
 """
+import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-from app.refund import RefundAuthority  # noqa: E402
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, ROOT)
+
+
+def load_target(name):
+    if name == 'real':
+        from app.controls.authority import RefundAuthority
+    elif name == 'standin':
+        from app.refund import RefundAuthority
+    else:
+        raise SystemExit(f'unknown target {name!r}')
+    return RefundAuthority
+
+
+# set in main() before any chain runs
+RefundAuthority = None
 
 
 def chain_rt02_amount_boundaries():
@@ -22,9 +44,9 @@ def chain_rt02_amount_boundaries():
     got, ok = {}, True
     for i, (amt, want) in enumerate(cases.items()):
         a = RefundAuthority()
-        res = a.request_refund('C-1', 'T-1001', amt)['outcome']
-        got[amt] = res
-        ok &= res == want
+        res = a.request_refund('C-1', 'T-1001', amt)
+        got[amt] = {'outcome': res['outcome'], 'reason': res.get('reason')}
+        ok &= res['outcome'] == want
     return ok, got
 
 
@@ -97,18 +119,35 @@ CHAINS = [
 ]
 
 
+def git_state():
+    def run(*args):
+        try:
+            return subprocess.run(['git', '-C', ROOT, *args], capture_output=True, text=True, check=True).stdout.strip()
+        except Exception:
+            return None
+    return {'commit': run('rev-parse', 'HEAD'), 'dirty': bool(run('status', '--porcelain', '--', 'app'))}
+
+
 def main():
+    global RefundAuthority
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--target', choices=['real', 'standin'], default='real')
+    args = ap.parse_args()
+    RefundAuthority = load_target(args.target)
+    print(f'target: {args.target} ({RefundAuthority.__module__})')
+
     results = []
     for rid, name, fn in CHAINS:
         passed, detail = fn()
         results.append({'id': rid, 'name': name, 'control_held': bool(passed), 'detail': detail})
         print(f"{rid} {'PASS' if passed else 'FAIL'}  {name}")
-    out_dir = os.path.join(os.path.dirname(__file__), 'results')
+    out_dir = os.path.join(ROOT, 'redteam', 'evidence')
     os.makedirs(out_dir, exist_ok=True)
     ts = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-    path = os.path.join(out_dir, f'refund_chains_{ts}.json')
+    path = os.path.join(out_dir, f'refund_chains_{args.target}_{ts}.json')
     with open(path, 'w') as f:
-        json.dump(results, f, indent=2, default=str)
+        json.dump({'run_at': ts, 'target': args.target, 'target_module': RefundAuthority.__module__,
+                   'git': git_state(), 'results': results}, f, indent=2, default=str)
     print(f'evidence: {path}')
     return 0 if all(r['control_held'] for r in results) else 1
 
