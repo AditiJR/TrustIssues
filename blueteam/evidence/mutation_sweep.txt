@@ -1,0 +1,89 @@
+Mutation sweep of app/controls and app/main.py
+
+Each line is one deliberate break applied to a copy of the tree, followed by the checks that then failed.
+Run with: python3 blueteam/run_retest.py and the HTTP tests (tests/test_http_controls.py, Python 3.11).
+A break is "caught" when at least one check fails.
+
+no_store_lock                      caught   BT-F01a BT-F01b
+no_weekly_python_R10               caught   BT-F01b BT-P01 BT-LIM01
+no_weekly_trigger                  caught   BT-F06
+no_per_txn_R09                     caught   BT-F06 BT-F10 BT-LIM01 BT-GATE01 BT-ESC01 BT-AUD01
+per_txn_schema_check_off           caught   BT-F06
+restore_ignores_admin              caught   BT-F05 BT-AUD01
+get_customer_returns_account_no    caught   BT-AC01
+open_case_no_ownership             caught   BT-AC01
+decide_no_ownership_R04            caught   BT-F06 BT-P01 BT-GATE01 http:test_every_request_is_audited_and_the_chain_verifies
+no_over_original_R06               caught   BT-P01
+no_replay_R07                      caught   BT-F01a BT-LIM01 BT-GATE01 BT-BANK01
+no_replay_unique_index             caught   BT-F06   (not caught on the first sweep; check added, then re-run)
+no_reason_code_check               caught   BT-AC02 BT-GATE01
+no_revocation_R01                  caught   BT-F02 BT-F05 BT-P01 BT-GATE01 BT-FAIL02
+no_local_stop_flag                 caught   BT-FAIL02
+records_ignore_revocation          caught   BT-AC02
+open_case_ignores_revocation       caught   BT-AC02
+scope_token_unchecked_records      caught   BT-AC02
+scope_token_unchecked_refund       caught   BT-AC02
+scope_token_unchecked_close        caught   BT-AC02
+closed_scope_can_refund            caught   BT-AC04
+scope_other_txn_refund             caught   BT-AC02
+no_scope_expiry_records            caught   BT-AC04
+no_scope_expiry_refund             caught   BT-AC04
+records_ignore_closed              caught   BT-AC04
+records_ignore_scope_mismatch      caught   BT-AC01 BT-FAIL01
+token_stored_in_clear              caught   BT-AC04
+filter_keeps_untagged              caught   BT-AC03
+filter_ignores_tag_conflict        caught   BT-AC03
+filter_keeps_other_customer        caught   BT-AC03
+filter_ignores_txn_tag             caught   BT-AC03
+filter_keeps_account_field         caught   BT-AC03
+filter_keeps_account_text          caught   BT-AC03
+filter_drop_not_logged             caught   BT-AC03
+public_view_has_reason             caught   BT-GATE01 http:test_every_denial_looks_the_same_to_the_customer http:test_other_customers_transaction_is_denied_without_saying_why http:test_within_limits_is_approved_and_body_is_public_view_only
+public_message_has_rule            caught   BT-GATE01 http:test_every_denial_looks_the_same_to_the_customer
+admin_token_prefix_match           caught   BT-GATE01 http:test_admin_token_must_match_exactly
+admin_token_no_min_length          caught   BT-GATE01 http:test_admin_token_must_match_exactly
+admin_denied_not_audited           caught   BT-GATE01 http:test_admin_token_must_match_exactly
+esc_approve_no_admin_check         caught   BT-ESC01
+esc_approve_no_weekly_check        caught   BT-ESC01
+esc_approve_while_revoked          caught   BT-ESC01
+esc_pending_not_blocking           caught   BT-F10 http:test_over_100_escalates_and_request_fields_cannot_grant_authority
+esc_denied_not_final               caught   BT-ESC01
+list_escalations_no_admin_check    caught   BT-ESC01
+window_6_days                      caught   BT-P01 BT-LIM01
+window_7d_minus_30min              caught   BT-LIM01
+window_7d_plus_1h                  caught   BT-LIM01
+weekly_50001                       caught   BT-LIM01
+weekly_49999                       caught   BT-F04 BT-LIM01 http:test_weekly_cap_holds_over_http
+per_txn_10001                      caught   BT-P01 BT-LIM01
+amount_accepts_float               caught   BT-F03
+verify_chain_always_true           caught   BT-AUD01
+no_audit_delete_trigger            caught   BT-AUD01
+no_audit_update_trigger            caught   BT-F07 BT-AUD01
+clean_text_identity                caught   BT-FAIL01 http:test_hostile_text_does_not_break_the_kill_switch_or_the_audit_view
+no_fallback_audit                  caught   BT-FAIL02
+bank_error_voids                   caught   BT-BANK01
+bank_key_per_attempt               caught   BT-BANK01
+bank_called_when_revoked           caught   BT-BANK01   (not caught on the first sweep; check added, then re-run)
+close_case_always_true             caught   BT-AC02 BT-AC04
+repr_prints_token                  caught   BT-AC04
+http_logs_open                     caught   http:test_logs_need_admin_and_are_redacted http:test_no_admin_when_token_is_not_configured
+http_logs_not_redacted             caught   http:test_logs_need_admin_and_are_redacted
+http_audit_not_redacted            caught   http:test_audit_view_keeps_references_and_redacts_customer_text
+http_audit_redacts_ids             caught   http:test_audit_view_keeps_references_and_redacts_customer_text
+http_full_decision_returned        caught   http:test_audit_view_keeps_references_and_redacts_customer_text http:test_every_denial_looks_the_same_to_the_customer http:test_other_customers_transaction_is_denied_without_saying_why http:test_within_limits_is_approved_and_body_is_public_view_only
+http_no_validation_handler         caught   http:test_odd_request_bodies_never_cause_a_500
+http_no_503                        caught   http:test_unaudited_decision_is_answered_with_503
+http_admin_routes_open             caught   http:test_admin_endpoints_need_the_token http:test_admin_token_must_match_exactly http:test_kill_switch_stops_refunds_until_an_admin_restores http:test_logs_need_admin_and_are_redacted http:test_no_admin_when_token_is_not_configured
+http_kill_switch_not_by_admin      caught   http:test_hostile_text_does_not_break_the_kill_switch_or_the_audit_view
+handler_skips_gate                 caught   http:test_hostile_text_does_not_break_the_kill_switch_or_the_audit_view http:test_audit_view_keeps_references_and_redacts_customer_text http:test_escalation_is_decided_by_admin_and_counts_toward_the_week http:test_every_denial_looks_the_same_to_the_customer http:test_every_request_is_audited_and_the_chain_verifies http:test_kill_switch_stops_refunds_until_an_admin_restores
+audit_skips_case_open              caught   BT-AC01 BT-AUD01 BT-FAIL01
+audit_skips_case_close             caught   BT-AC04 BT-AUD01
+audit_skips_records_access         caught   BT-AC01 BT-AC03 BT-AUD01 BT-FAIL01
+audit_skips_kill_switch            caught   BT-AUD01 BT-FAIL01 http:test_hostile_text_does_not_break_the_kill_switch_or_the_audit_view
+audit_skips_kill_switch_denied     caught   BT-AUD01
+audit_skips_escalation_decision    caught   BT-AUD01
+audit_skips_admin_auth_denied      caught   BT-GATE01 BT-AUD01 http:test_admin_token_must_match_exactly
+audit_skips_settlement             caught   BT-BANK01
+audit_skips_refund_decision        caught   BT-F01b BT-F03 BT-F07 BT-F08 BT-P01 BT-P02
+
+81 breaks, 81 caught

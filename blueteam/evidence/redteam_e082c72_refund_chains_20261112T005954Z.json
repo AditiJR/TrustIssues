@@ -1,0 +1,93 @@
+[
+  {
+    "id": "RT-02",
+    "name": "Per-transaction cap and malformed amounts",
+    "control_held": true,
+    "detail": {
+      "100.00": "approved",
+      "100.01": "escalated",
+      "-5": "denied",
+      "0": "denied",
+      "NaN": "denied",
+      "Infinity": "denied",
+      "abc": "denied",
+      "1e9": "denied",
+      "10.001": "denied"
+    }
+  },
+  {
+    "id": "RT-03",
+    "name": "Split refunds to evade weekly cap",
+    "control_held": true,
+    "detail": [
+      "approved",
+      "approved",
+      "approved",
+      "approved",
+      "approved",
+      "denied"
+    ]
+  },
+  {
+    "id": "RT-04",
+    "name": "Replay a refund on the same transaction",
+    "control_held": true,
+    "detail": [
+      "approved",
+      "denied"
+    ]
+  },
+  {
+    "id": "RT-05",
+    "name": "Refund after authority is revoked (kill switch)",
+    "control_held": true,
+    "detail": {
+      "before": "approved",
+      "while_revoked": [
+        "denied",
+        "denied"
+      ],
+      "after_restore": "approved"
+    }
+  },
+  {
+    "id": "RT-06",
+    "name": "Refund another customer's transaction",
+    "control_held": true,
+    "detail": [
+      {
+        "outcome": "denied",
+        "reason": "transaction not owned by customer",
+        "decision_id": "D-d7d0281236604d87ba0a48cd7eddb778"
+      },
+      {
+        "outcome": "denied",
+        "reason": "transaction not owned by customer",
+        "decision_id": "D-6f1e28c593fb434f8c44512e5a7854cc"
+      }
+    ]
+  },
+  {
+    "id": "RT-07",
+    "name": "Weekly window boundary and rollover",
+    "control_held": true,
+    "detail": [
+      "denied",
+      "denied",
+      "approved"
+    ]
+  },
+  {
+    "id": "RT-08",
+    "name": "Over-refund and audit completeness",
+    "control_held": true,
+    "detail": {
+      "over": {
+        "outcome": "denied",
+        "reason": "exceeds original transaction",
+        "decision_id": "D-66af7f0755d44259877dab5a39f58a39"
+      },
+      "audit_entries": 4
+    }
+  }
+]
