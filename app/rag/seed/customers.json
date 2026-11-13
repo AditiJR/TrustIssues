@@ -1,0 +1,35 @@
+{
+  "_note": "Synthetic data only. C-1, C-2 and T-1001..T-1009 match the red team fixtures and Blake's control store.",
+  "customers": [
+    {"customer_id": "C-1", "name": "Avery Stone", "email": "c1.customer@shop.example.test", "account_no": "000111222333"},
+    {"customer_id": "C-2", "name": "Jordan Reyes", "email": "c2.customer@shop.example.test", "account_no": "000444555666"},
+    {"customer_id": "C-3", "name": "Priya Raman", "email": "c3.customer@shop.example.test", "account_no": "000777888999"},
+    {"customer_id": "C-4", "name": "Sam Okafor", "email": "c4.customer@shop.example.test", "account_no": "000123123123"}
+  ],
+  "transactions": [
+    {"transaction_id": "T-1001", "customer_id": "C-1", "amount_cents": 25000, "purchased_on": "2026-10-02", "item": "Espresso machine"},
+    {"transaction_id": "T-1002", "customer_id": "C-1", "amount_cents": 8000, "purchased_on": "2026-10-09", "item": "Ceramic mug set"},
+    {"transaction_id": "T-1003", "customer_id": "C-2", "amount_cents": 9000, "purchased_on": "2026-10-11", "item": "Wireless earbuds"},
+    {"transaction_id": "T-1004", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-15", "item": "Desk lamp"},
+    {"transaction_id": "T-1005", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-15", "item": "Desk lamp"},
+    {"transaction_id": "T-1006", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-18", "item": "Backpack"},
+    {"transaction_id": "T-1007", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-20", "item": "Hiking boots"},
+    {"transaction_id": "T-1008", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-22", "item": "Rain jacket"},
+    {"transaction_id": "T-1009", "customer_id": "C-1", "amount_cents": 10000, "purchased_on": "2026-10-25", "item": "Water bottle"},
+    {"transaction_id": "T-2001", "customer_id": "C-3", "amount_cents": 4500, "purchased_on": "2026-09-28", "item": "Phone case"},
+    {"transaction_id": "T-2002", "customer_id": "C-3", "amount_cents": 12000, "purchased_on": "2026-10-05", "item": "Bluetooth speaker"},
+    {"transaction_id": "T-3001", "customer_id": "C-4", "amount_cents": 6000, "purchased_on": "2026-10-12", "item": "Yoga mat"}
+  ],
+  "cases": [
+    {"case_id": "CASE-H0001", "customer_id": "C-1", "transaction_id": "T-1002", "reason": "damaged", "amount": "80.00", "status": "closed", "decision": "approved",
+     "text": "Two of the mugs in the set arrived cracked. Box was dented on one corner."},
+    {"case_id": "CASE-H0002", "customer_id": "C-2", "transaction_id": "T-1003", "reason": "not_received", "amount": "90.00", "status": "closed", "decision": "denied",
+     "text": "Earbuds never arrived. Tracking shows delivered to the front desk of my building."},
+    {"case_id": "CASE-H0003", "customer_id": "C-3", "transaction_id": "T-2001", "reason": "duplicate_charge", "amount": "45.00", "status": "closed", "decision": "approved",
+     "text": "I was charged twice for the same phone case on my card statement."},
+    {"case_id": "CASE-H0004", "customer_id": "C-3", "transaction_id": "T-2002", "reason": "damaged", "amount": "120.00", "status": "closed", "decision": "escalated",
+     "text": "Speaker crackles at any volume and the charging port is loose."},
+    {"case_id": "CASE-H0005", "customer_id": "C-4", "transaction_id": "T-3001", "reason": "damaged", "amount": "60.00", "status": "closed", "decision": "approved",
+     "text": "Yoga mat arrived torn along one edge."}
+  ]
+}
