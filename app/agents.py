@@ -1,8 +1,12 @@
-"""the five specialized agents. all stubs for now, nothing here has side effects yet.
+"""the five specialized agents. intake, email and reporting are still stubs.
 
+records is Vaishnavi's agent (app/records_agent.py), reading through Blake's case-scoped gateway.
+refunds asks Blake's limit control for the decision. it never moves money or sets a limit itself.
 each one only gets its own case, the orchestrator never hands over other customers' records.
-Blake's access control and limit control still need to go in front of records and refunds.
 """
+
+from app.controls import gate
+from app.records_agent import records_agent
 
 
 def intake_agent(case_id: str, task: str, case: dict) -> dict:
@@ -13,17 +17,20 @@ def email_agent(case_id: str, task: str, case: dict) -> dict:
     return {'status': 'ok', 'output': '[STUB] Email drafted, not sent.'}
 
 
-def records_agent(case_id: str, task: str, case: dict) -> dict:
-    return {
-        'status': 'ok',
-        'output': (f"[STUB] Would look up customer {case['request']['customer_id']} / "
-                   f"transaction {case['request']['transaction_id']}. No records read."),
-    }
-
-
 def refunds_agent(case_id: str, task: str, case: dict) -> dict:
-    # never moves money. a real decision has to go through limit control first
-    return {'status': 'ok', 'output': '[STUB] Decision pending. No limit check yet, no money moved.'}
+    """asks limit control for the decision. the amount, reason and the customer/transaction pair come from
+    the validated form and the case scope, never from the planner's task text."""
+    scope = case.get('scope')
+    if scope is None:
+        return {'status': 'error', 'output': 'No case scope, so no decision was requested.'}
+    if case.get('decision') is not None:      # a plan that lists refunds twice must not request twice
+        return {'status': 'ok', 'output': 'A decision was already recorded for this case.'}
+    req = case['request']
+    decision = gate.request_refund(scope, req['amount'], req['reason'], req.get('description'))
+    case['decision'] = decision
+    if decision.get('reason') == gate.UNAVAILABLE:
+        return {'status': 'error', 'output': 'The decision could not be recorded.'}
+    return {'status': 'ok', 'output': f"Decision: {decision['outcome']} (reference {decision['decision_id']})."}
 
 
 def reporting_agent(case_id: str, task: str, case: dict) -> dict:

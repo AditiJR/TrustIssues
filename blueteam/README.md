@@ -38,8 +38,11 @@ gate.engage_kill_switch(actor='detector', reason='...')
 ```
 
 A scope stops working after 30 minutes, after `close_case`, and while the kill switch is on.
-`POST /api/refund-requests` already goes through `gate.handle_refund_form` and returns only
-`outcome`, `message` and `reference` to the customer. Every denial looks the same from outside;
+`POST /api/refund-requests` goes form -> input scan -> orchestrator, which opens the case through the gate
+(ownership check), runs the records and refunds agents, and gets the decision from limit control. The customer
+sees the decision's `outcome`, `message` and `reference`, plus the case id and the step list (no steps on a denial,
+so every denial looks the same). `gate.handle_refund_form` is still used for the audited denial when the ownership
+check fails. Every denial looks the same from outside;
 the reason is in the audit log. `app/main.py` calls `install_controls(app)` once to add the
 admin routes and the error handlers.
 

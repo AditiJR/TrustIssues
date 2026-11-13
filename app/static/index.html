@@ -139,11 +139,18 @@
       result.hidden = false;
     }
 
+    // approved / escalated / denied comes from the limit control, not from the agents
+    const OUTCOME_CLASS = { approved: "ok", escalated: "pending", denied: "error", pending: "pending" };
+
     function showCase(body) {
-      result.replaceChildren(
-        el("div", body.message),
-        el("div", `Case ${body.case_id} · status: ${body.status}`, "meta"),
-      );
+      const outcome = body.outcome || "denied";
+      const decision = el("div", `Decision: ${outcome}`);
+      decision.style.fontWeight = "600";
+      result.replaceChildren(decision, el("div", body.message));
+      const meta = [];
+      if (body.reference) meta.push(`Reference ${body.reference}`);
+      if (body.case_id) meta.push(`Case ${body.case_id}`);
+      if (meta.length) result.append(el("div", meta.join(" · "), "meta"));
       if (body.steps && body.steps.length) {
         const list = el("ol");
         for (const step of body.steps) {
@@ -154,7 +161,7 @@
         }
         result.append(list);
       }
-      result.className = body.status === "completed" ? "ok" : "error";
+      result.className = OUTCOME_CLASS[outcome] || "error";
       result.hidden = false;
     }
 
@@ -181,7 +188,7 @@
         const body = await response.json();
         if (response.ok) {
           showCase(body);
-          if (body.status === "completed") form.reset();
+          if (body.outcome === "approved" || body.outcome === "escalated") form.reset();
         } else {
           showResult("The request could not be submitted. Please check the fields and try again.", "error");
         }

@@ -5,12 +5,10 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, condecimal, constr
 from app.agent import Agent, Planner
-from app.killswitch import KillSwitch
 from app.orchestrator import Orchestrator
 from app.retriever import Retriever
 from app.controls import gate
-from app.controls.http import install_controls, redact, refund_response, require_admin
-
+from app.controls.http import install_controls, redact, require_admin
 from app.data_api import router as data_router
 from app.monitoring.audit import AuditLog, SEVERITY_RANK
 from app.monitoring.detection import get_detector
@@ -21,8 +19,9 @@ app = FastAPI(title='Capstone Starter Agent - Safe Demo')
 # Simple components
 retriever = Retriever()
 agent = Agent(retriever=retriever)
-kill_switch = KillSwitch()
-orchestrator = Orchestrator(planner=Planner(), kill_switch=kill_switch)
+# the kill switch lives in Blake's controls (app.controls.gate), so it is shared with the limit control
+# and survives a restart. admin routes for it are POST /admin/kill-switch (see install_controls)
+orchestrator = Orchestrator(planner=Planner())
 
 LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -64,26 +63,24 @@ async def index():
 
 @app.post('/api/refund-requests')
 def submit_refund_request(req: RefundRequest):
-    """checks the form, then hands the case to the orchestrator.
+    """form -> input scan -> orchestrator -> (ownership via the gate) -> records and refunds agents -> limit control.
 
     plain def on purpose, not async, so FastAPI runs the slow LLM call in a worker thread.
     """
+    # the description is written by the customer: scan it before the planner or any agent sees it
+    scan = get_detector().scan_input(req.description or '', source='form', customer_id=req.customer_id,
+                                     allowed_transactions=[req.transaction_id])
+    if scan.recommended_action == 'quarantine':
+        # attack-like text: nothing is planned or refunded. the finding is in the audit log (/admin/detections)
+        # TODO: there is no review queue for quarantined requests yet, only the detections list
+        return {'status': 'quarantined', 'outcome': 'escalated', 'steps': [],
+                'message': 'Your request needs review by an administrator. You will hear back by email.'}
     request = req.dict()
     request['amount'] = str(request['amount'])  # Decimal -> str, otherwise json can't log it
-    return orchestrator.handle_refund_request(request)
-
-class RevokeRequest(BaseModel):
-    reason: constr(strip_whitespace=True, min_length=1, max_length=200) = 'manual revoke'
-
-@app.get('/admin/kill-switch')
-def kill_switch_status():
-    return kill_switch.status()
-
-@app.post('/admin/kill-switch/revoke')
-def revoke_agent(req: RevokeRequest = RevokeRequest()):
-    """revokes the orchestrator's authority. only a server restart turns it back on.
-    TODO: lock this to the admin role once we have logins."""
-    return orchestrator.revoke_authority(req.reason)
+    result = orchestrator.handle_refund_request(request)
+    if result['status'] == 'unavailable':
+        raise HTTPException(status_code=503, detail='try again later')
+    return result
 
 @app.post('/tasks')
 async def submit_task(req: TaskRequest):

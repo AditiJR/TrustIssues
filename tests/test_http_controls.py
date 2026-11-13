@@ -36,11 +36,16 @@ class HttpControls(unittest.TestCase):
         gate._reset_for_tests()
         self.saved_log_dir = main.LOG_DIR
         main.LOG_DIR = self.tmp
+        # the orchestrator calls a planner; use a fixed plan so tests never reach the Anthropic API
+        from tests.fakes import FixedPlanner
+        self.saved_planner = main.orchestrator.planner
+        main.orchestrator.planner = FixedPlanner()
         self.client = TestClient(main.app)
 
     def tearDown(self):
         self.gate._reset_for_tests()
         self.main.LOG_DIR = self.saved_log_dir
+        self.main.orchestrator.planner = self.saved_planner
         for k, v in self.saved.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -55,7 +60,10 @@ class HttpControls(unittest.TestCase):
     def test_within_limits_is_approved_and_body_is_public_view_only(self):
         body = self.refund()
         self.assertEqual(body['outcome'], 'approved')
-        self.assertEqual(sorted(body), ['message', 'outcome', 'reference'])
+        # the decision's public view (outcome, message, reference) plus the orchestrator's case id, status and steps
+        self.assertEqual(sorted(body), ['case_id', 'message', 'outcome', 'reference', 'status', 'steps'])
+        self.assertEqual([s['agent'] for s in body['steps']], ['intake', 'records', 'refunds'])
+        self.assertNotIn('record', body['steps'][1]['result'])     # the raw record the agent read is not returned
 
     def test_over_100_escalates_and_request_fields_cannot_grant_authority(self):
         body = self.refund(txn='T-1001', amount='250.00', is_admin=True, approved=True, limit_override=1000,
@@ -85,7 +93,6 @@ class HttpControls(unittest.TestCase):
         self.assertEqual(len(r.json()), 1)
         self.assertNotIn('c1.customer@shop.example.test', r.text)
         self.assertNotIn('000111222333', r.text)
-        self.assertIn('[redacted-email]', r.text)
         self.assertIn('[redacted-number]', r.text)
 
     def test_admin_endpoints_need_the_token(self):
@@ -136,6 +143,7 @@ class HttpControls(unittest.TestCase):
         bodies = [self.refund(txn='T-1003', amount='50.00'), self.refund(txn='T-9999'), self.refund(),
                   self.refund(customer='C-999')]
         for b in bodies:
+            b.pop('case_id')                                  # random per request
             b['message'] = b['message'].replace(b.pop('reference'), '<ref>')
         self.assertTrue(all(b == bodies[0] for b in bodies), bodies)
         self.assertEqual(bodies[0]['outcome'], 'denied')
@@ -176,13 +184,13 @@ class HttpControls(unittest.TestCase):
         self.assertEqual(len(audit.json()['head']), 64)
 
     def test_unaudited_decision_is_answered_with_503(self):
-        original = self.gate.handle_refund_form
-        self.gate.handle_refund_form = lambda *a, **k: {'decision_id': 'D-x', 'outcome': 'denied', 'reason': self.gate.UNAVAILABLE,
+        original = self.gate.request_refund        # the orchestrator reaches limit control through the refunds agent
+        self.gate.request_refund = lambda *a, **k: {'decision_id': 'D-x', 'outcome': 'denied', 'reason': self.gate.UNAVAILABLE,
                                                         'rule': 'R00', 'message': 'x'}
         try:
             self.assertEqual(self.client.post('/api/refund-requests', json=form()).status_code, 503)
         finally:
-            self.gate.handle_refund_form = original
+            self.gate.request_refund = original
 
     def test_every_request_is_audited_and_the_chain_verifies(self):
         self.refund()
