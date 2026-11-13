@@ -1,0 +1,18 @@
+# Secrets
+.env
+.env.*
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Generated output
+logs/
+redteam/results/
+
+# Temporary joke background (local only)
+app/static/omfgdogs.gif
+
+# Temporary concept logo (local only)
+app/static/temp_logo.png
