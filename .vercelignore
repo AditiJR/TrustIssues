@@ -1,0 +1,8 @@
+.venv
+logs
+tests
+redteam/evidence
+blueteam/evidence
+__pycache__
+*.pyc
+.env
