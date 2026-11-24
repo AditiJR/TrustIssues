@@ -37,7 +37,8 @@ class FixedPlanner:
 def setup():
     """Private control DB, event log and RAG DB, then the app. Env is set before app.main is imported."""
     tmp = tempfile.mkdtemp(prefix='rt_http_')
-    os.environ['TRUSTISSUES_CONTROL_DB'] = os.path.join(tmp, 'controls.db')
+    # REDTEAM_CONTROL_DB: a postgres:// URL of a throwaway database, to run the chains on the hosted backend
+    os.environ['TRUSTISSUES_CONTROL_DB'] = os.environ.get('REDTEAM_CONTROL_DB') or os.path.join(tmp, 'controls.db')
     os.environ['TRUSTISSUES_ADMIN_TOKEN'] = ADMIN_TOKEN
     os.environ['TRUSTISSUES_EVENT_LOG'] = os.path.join(tmp, 'events.jsonl')
     os.environ['TRUSTISSUES_RAG_DB'] = os.path.join(tmp, 'rag.db')

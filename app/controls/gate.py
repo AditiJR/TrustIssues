@@ -8,6 +8,7 @@ import threading
 
 from app.controls.access_control import AccessControl, CaseScope, authenticate_admin
 from app.controls.limit_control import LimitControl
+from app.controls.pg import is_pg_url
 from app.controls.store import Store
 
 _state = {}
@@ -22,8 +23,9 @@ MESSAGES = {
 
 
 def db_path():
-    """TRUSTISSUES_CONTROL_DB, or logs/controls.db next to the app's other runtime output."""
-    return os.environ.get('TRUSTISSUES_CONTROL_DB') or os.path.join(
+    """Where the control store lives. In order: TRUSTISSUES_CONTROL_DB (a file, or a postgres:// URL),
+    DATABASE_URL (what Vercel's Neon integration sets), else logs/controls.db next to the app's other output."""
+    return os.environ.get('TRUSTISSUES_CONTROL_DB') or os.environ.get('DATABASE_URL') or os.path.join(
         os.path.dirname(os.path.abspath(__file__)), '..', '..', 'logs', 'controls.db')
 
 
@@ -34,7 +36,7 @@ def _controls():
         with _init_lock:
             if not _state:
                 path = db_path()
-                if path != ':memory:':
+                if path != ':memory:' and not is_pg_url(path):
                     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
                 store = Store(path)
                 lc = LimitControl(store)

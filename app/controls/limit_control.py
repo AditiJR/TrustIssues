@@ -4,13 +4,12 @@ Every call to decide() ends in exactly one audited outcome: approved, escalated 
 Nothing here reads a limit from a request, a prompt, a policy document or the environment.
 """
 import re
-import sqlite3
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.controls.limits import MAX_AMOUNT_CENTS, PER_TXN_LIMIT_CENTS, SCOPE_TTL_US, WEEKLY_LIMIT_CENTS, WINDOW_US
-from app.controls.store import clean_text, safe_repr, token_digest      # safe_repr is re-exported
+from app.controls.store import DB_ERRORS, clean_text, safe_repr, token_digest      # safe_repr is re-exported
 
 _ID_RE = {'customer': re.compile(r'C-[0-9]{1,9}'), 'txn': re.compile(r'T-[0-9]{1,9}')}
 _AMOUNT_RE = re.compile(r'[0-9]{1,7}(\.[0-9]{1,2})?')
@@ -105,7 +104,7 @@ class LimitControl:
         with self._store.lock:
             try:
                 row = self._store.one('SELECT revoked FROM authority_state WHERE id = 1')
-            except sqlite3.Error:
+            except DB_ERRORS:
                 return True
             return row is None or row[0] != 0
 
@@ -279,8 +278,10 @@ class LimitControl:
                 now_us = self._stamp() if value else self._now_us()
                 with st.tx():
                     prev = st.one('SELECT revoked FROM authority_state WHERE id = 1')
-                    st.conn.execute('INSERT OR REPLACE INTO authority_state(id, revoked, changed_us, changed_by, reason) '
-                                    'VALUES (1,?,?,?,?)', (value, now_us, actor, reason))
+                    st.conn.execute('INSERT INTO authority_state(id, revoked, changed_us, changed_by, reason) VALUES (1,?,?,?,?) '
+                                    'ON CONFLICT (id) DO UPDATE SET revoked = excluded.revoked, '
+                                    'changed_us = excluded.changed_us, changed_by = excluded.changed_by, '
+                                    'reason = excluded.reason', (value, now_us, actor, reason))
                     st.append_audit(now_us, 'kill_switch', did, actor,
                                     {**body, 'previous': None if prev is None else bool(prev[0])})
             except Exception as exc:
@@ -289,8 +290,10 @@ class LimitControl:
                     return {'decision_id': did, 'outcome': 'ok', 'engaged': True, 'persisted': False}
                 return {'decision_id': did, 'outcome': 'denied', 'reason': 'control store unavailable',
                         'engaged': self.is_revoked()}
-            if not value:
-                self._stopped = False
+            # The change is now durable, so the store is the authority. Keeping the in-process flag after this would
+            # make a restore done through another process or serverless instance invisible to this one: it would
+            # stay stopped forever. (If the write failed we returned above, and the flag stays set.)
+            self._stopped = False
             return {'decision_id': did, 'outcome': 'ok', 'engaged': bool(value)}
 
     # -- admin decision on an escalation ---------------------------------------

@@ -20,13 +20,18 @@ import threading
 DEFAULT_CONTROL_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'logs', 'controls.db'))
 
 
+def _is_url(path):
+    return isinstance(path, str) and path.startswith(('postgres://', 'postgresql://'))
+
+
 def control_db_path():
-    """Same rule as Blake's gate.db_path()."""
+    """Same rule as Blake's gate.db_path(): a file path, or a postgres:// URL when the controls run on Postgres."""
     try:
         from app.controls.gate import db_path      # present once Blake's branch is merged
-        return os.path.abspath(db_path())
+        path = db_path()
     except ImportError:
-        return os.path.abspath(os.environ.get('TRUSTISSUES_CONTROL_DB') or DEFAULT_CONTROL_DB)
+        path = os.environ.get('TRUSTISSUES_CONTROL_DB') or os.environ.get('DATABASE_URL') or DEFAULT_CONTROL_DB
+    return path if _is_url(path) else os.path.abspath(path)
 
 
 def _blake_code_present():
@@ -43,12 +48,18 @@ class ControlDBSource:
     writable = False
 
     def __init__(self, path=None):
-        self.path = os.path.abspath(path or control_db_path())
+        path = path or control_db_path()
+        self.path = path if _is_url(path) else os.path.abspath(path)
         self._conn = None
         self._lock = threading.Lock()
 
     def _db(self):
         with self._lock:
+            if self._conn is None and _is_url(self.path):
+                from app.controls import gate
+                gate.is_revoked()                              # opens (and creates + seeds) the store on first use
+                from app.controls.pg import PgConn
+                self._conn = PgConn(self.path, readonly=True)  # this side never writes Blake's data
             if self._conn is None:
                 if not os.path.exists(self.path):
                     try:     # Blake's gate creates and seeds his store on first use
@@ -129,6 +140,6 @@ def pick_source(conn):
     mode = (os.environ.get('TRUSTISSUES_RECORDS_SOURCE') or 'auto').lower()
     if mode == 'local':
         return LocalSource(conn)
-    if mode == 'control' or _blake_code_present() or os.path.exists(control_db_path()):
+    if mode == 'control' or _blake_code_present() or _is_url(control_db_path()) or os.path.exists(control_db_path()):
         return ControlDBSource()
     return LocalSource(conn)

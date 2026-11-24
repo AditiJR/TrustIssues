@@ -43,6 +43,15 @@ def tmpdir(prefix):
     return d
 
 
+# The same checks also run against Postgres (tests/test_pg_store.py), so the errors they expect are the union.
+try:
+    import psycopg
+    INTEGRITY_ERRORS = (sqlite3.IntegrityError, psycopg.IntegrityError)
+    DATABASE_ERRORS = (sqlite3.DatabaseError, psycopg.DatabaseError)
+except ImportError:
+    INTEGRITY_ERRORS, DATABASE_ERRORS = (sqlite3.IntegrityError,), (sqlite3.DatabaseError,)
+
+
 @atexit.register
 def _cleanup():
     for d in _TMP:
@@ -305,7 +314,7 @@ def f06(t):
         for label, args in (('schema_second_refund_on_txn', ('D-2', 100)), ('schema_agent_over_100', ('D-3', 10001))):
             try:
                 st.conn.execute(row.replace('T-1004', 'T-1004' if 'second' in label else 'T-1001'), args); d[label] = 'accepted'
-            except sqlite3.IntegrityError:
+            except INTEGRITY_ERRORS:
                 d[label] = 'rejected'
         ok = (ok and d['python_constants_rebound'] == 'denied' and d['weekly_total_cents'] <= 50000
               and d['schema_second_refund_on_txn'] == 'rejected' and d['schema_agent_over_100'] == 'rejected')
@@ -339,7 +348,7 @@ def f07(t):
         d['chain_ok'] = a._store.verify_audit_chain()
         try:
             a._store.conn.execute("UPDATE audit SET body = '{}' WHERE seq = 1"); d['sql_update'] = 'accepted'
-        except sqlite3.DatabaseError as e:
+        except DATABASE_ERRORS as e:
             d['sql_update'] = 'rejected: ' + str(e)
         ok = ok and d['chain_ok'] and d['sql_update'].startswith('rejected')
     return ok, d
@@ -762,7 +771,7 @@ def aud01(t):
     for label, sql in (('update', "UPDATE audit SET body = '{}' WHERE seq = 2"), ('delete', 'DELETE FROM audit WHERE seq = 2')):
         try:
             st.conn.execute(sql); d['store_' + label] = 'accepted'
-        except sqlite3.DatabaseError as exc:
+        except DATABASE_ERRORS as exc:
             d['store_' + label] = 'rejected: ' + str(exc)
     # someone with the file: drop the triggers and tamper directly
     raw = sqlite3.connect(path, isolation_level=None)

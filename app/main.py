@@ -23,7 +23,8 @@ agent = Agent(retriever=retriever)
 # and survives a restart. admin routes for it are POST /admin/kill-switch (see install_controls)
 orchestrator = Orchestrator(planner=Planner())
 
-LOG_DIR = os.path.join(os.path.dirname(__file__), '..', 'logs')
+# TRUSTISSUES_LOG_DIR lets a host with a read-only code directory (Vercel) write somewhere else, e.g. /tmp
+LOG_DIR = os.environ.get('TRUSTISSUES_LOG_DIR') or os.path.join(os.path.dirname(__file__), '..', 'logs')
 os.makedirs(LOG_DIR, exist_ok=True)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')

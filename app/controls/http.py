@@ -7,7 +7,6 @@
 The admin token is sent in the X-Admin-Token header and compared with TRUSTISSUES_ADMIN_TOKEN.
 """
 import re
-import sqlite3
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -16,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, StrictBool, constr
 
 from app.controls import gate
-from app.controls.store import clean_text
+from app.controls.store import DB_ERRORS, clean_text
 
 _EMAIL = re.compile(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}')
 _LONG_DIGITS = re.compile(r'\d{8,}')
@@ -119,5 +118,6 @@ async def _validation_error(request, exc):
 def install_controls(app):
     """Add the /admin routes and the error handlers the controls rely on."""
     app.include_router(router)
-    app.add_exception_handler(sqlite3.Error, _store_unavailable)
+    for error_class in DB_ERRORS:
+        app.add_exception_handler(error_class, _store_unavailable)
     app.add_exception_handler(RequestValidationError, _validation_error)
