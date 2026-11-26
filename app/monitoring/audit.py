@@ -20,7 +20,11 @@ Usage from any component:
 
 The file is TRUSTISSUES_EVENT_LOG if set, otherwise <repo>/logs/events.jsonl.
 """
-import fcntl
+# TODO(Vaishnavi): windows has no fcntl, so this skips the file lock there. can you keep it working on windows when you move the log to postgres?
+try:
+    import fcntl
+except ImportError:
+    fcntl = None
 import hashlib
 import json
 import os
@@ -134,7 +138,8 @@ class AuditLog:
         entry.update(redact(extra))
         try:
             with self._lock, open(self.path, 'a+b') as fh:
-                fcntl.flock(fh, fcntl.LOCK_EX)
+                if fcntl is not None:
+                    fcntl.flock(fh, fcntl.LOCK_EX)
                 try:
                     seq, prev = self._tail(fh)
                     entry['seq'] = seq + 1
@@ -145,7 +150,8 @@ class AuditLog:
                     fh.flush()
                     os.fsync(fh.fileno())
                 finally:
-                    fcntl.flock(fh, fcntl.LOCK_UN)
+                    if fcntl is not None:
+                        fcntl.flock(fh, fcntl.LOCK_UN)
         except OSError as exc:
             entry['write_error'] = type(exc).__name__
         return entry

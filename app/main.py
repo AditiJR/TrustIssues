@@ -12,9 +12,14 @@ from app.controls.http import install_controls, redact, require_admin
 from app.data_api import router as data_router
 from app.monitoring.audit import AuditLog, SEVERITY_RANK
 from app.monitoring.detection import get_detector
-import json, os
+import base64, hashlib, json, os, re
 
-app = FastAPI(title='Capstone Starter Agent - Safe Demo')
+# vercel sets VERCEL=1 in its functions. no swagger or schema in prod, but they stay on locally for poking the API
+ON_VERCEL = bool(os.environ.get('VERCEL'))
+app = FastAPI(title='Capstone Starter Agent - Safe Demo',
+              docs_url=None if ON_VERCEL else '/docs',
+              redoc_url=None if ON_VERCEL else '/redoc',
+              openapi_url=None if ON_VERCEL else '/openapi.json')
 
 # Simple components
 retriever = Retriever()
@@ -29,6 +34,49 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), 'static')
 app.mount('/static', StaticFiles(directory=STATIC_DIR), name='static')
+
+
+def _inline_hashes(html, tag):
+    # the page has one inline <script> and one inline <style>. hashing them at startup means no 'unsafe-inline'
+    # and nothing to update by hand when index.html changes
+    blocks = re.findall(r'<%s\b[^>]*>(.*?)</%s>' % (tag, tag), html, re.S)
+    return ' '.join("'sha256-%s'" % base64.b64encode(hashlib.sha256(b.encode('utf-8')).digest()).decode()
+                    for b in blocks)
+
+
+with open(os.path.join(STATIC_DIR, 'index.html'), encoding='utf-8') as _fh:
+    _INDEX_HTML = _fh.read()
+
+CSP = '; '.join([
+    "default-src 'none'",
+    'script-src ' + _inline_hashes(_INDEX_HTML, 'script'),
+    'style-src ' + _inline_hashes(_INDEX_HTML, 'style'),
+    "img-src 'self' data:",     # the select arrow is a data: svg
+    "connect-src 'self'",
+    "form-action 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+])
+
+SECURITY_HEADERS = {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'no-referrer',
+    # browsers ignore this over plain http, so it does nothing on localhost
+    'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
+}
+
+# swagger loads its js and css from a cdn, so the strict CSP would blank it. only matters locally, prod has no docs
+_DOCS_PATHS = () if ON_VERCEL else ('/docs', '/docs/oauth2-redirect', '/redoc')
+
+
+@app.middleware('http')
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.update(SECURITY_HEADERS)
+    if request.url.path not in _DOCS_PATHS:
+        response.headers['Content-Security-Policy'] = CSP
+    return response
 
 # Admin-only endpoints (X-Admin-Token header) and the controls' error handlers
 install_controls(app)
