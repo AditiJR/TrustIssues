@@ -12,6 +12,21 @@ INDEX = os.path.join(os.path.dirname(__file__), '..', 'app', 'static', 'index.ht
 DOCS = ('/docs', '/redoc', '/openapi.json')
 
 
+@pytest.fixture(autouse=True)
+def temp_dbs(isolated_paths, monkeypatch):
+    # the refund route runs the rate limiter and the admin 403 gets audited by the gate, so without this
+    # both write to the real logs/casework.db and logs/controls.db
+    from app import ratelimit
+    from app.controls import gate
+    monkeypatch.setenv('TRUSTISSUES_CONTROL_DB', str(isolated_paths / 'controls.db'))
+    monkeypatch.setenv('TRUSTISSUES_CASEWORK_DB', str(isolated_paths / 'casework.db'))
+    gate._reset_for_tests()
+    ratelimit._reset_for_tests()
+    yield
+    gate._reset_for_tests()
+    ratelimit._reset_for_tests()
+
+
 @pytest.fixture
 def client(isolated_paths, monkeypatch):
     monkeypatch.delenv('VERCEL', raising=False)

@@ -176,7 +176,10 @@ class HttpControls(unittest.TestCase):
         self.assertEqual([(e['engaged'], e['by_admin']) for e in switches], [(True, True), (False, True)])
 
     def test_audit_view_keeps_references_and_redacts_customer_text(self):
-        refs = [self.refund(customer='c2.customer@shop.example.test', txn='T-1003')['reference'] for _ in range(40)]
+        from unittest import mock
+        # 40 requests from one test client is over the real per-IP limit (30 a minute), so raise it for this test only
+        with mock.patch('app.ratelimit.PER_IP', (60, 100)):
+            refs = [self.refund(customer='c2.customer@shop.example.test', txn='T-1003')['reference'] for _ in range(40)]
         audit = self.client.get('/admin/audit?limit=1000', headers=ADMIN)
         ids = {e['decision_id'] for e in audit.json()['entries']}
         self.assertTrue(set(refs) <= ids)
