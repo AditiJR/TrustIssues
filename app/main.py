@@ -12,6 +12,7 @@ from app.controls.http import install_controls, redact, require_admin
 from app.data_api import router as data_router
 from app.monitoring.audit import AuditLog, SEVERITY_RANK
 from app.monitoring.detection import get_detector
+from app.ratelimit import refund_rate_limit
 import base64, hashlib, json, os, re
 
 # vercel sets VERCEL=1 in its functions. no swagger or schema in prod, but they stay on locally for poking the API
@@ -110,9 +111,9 @@ async def index():
     """Serve the browser UI."""
     return FileResponse(os.path.join(STATIC_DIR, 'index.html'))
 
-@app.post('/api/refund-requests')
+@app.post('/api/refund-requests', dependencies=[Depends(refund_rate_limit)])
 def submit_refund_request(req: RefundRequest):
-    """form -> input scan -> orchestrator -> (ownership via the gate) -> records and refunds agents -> limit control.
+    """rate limit -> form -> input scan -> orchestrator -> (ownership via the gate) -> agents -> limit control.
 
     plain def on purpose, not async, so FastAPI runs the slow LLM call in a worker thread.
     """
