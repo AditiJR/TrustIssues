@@ -17,11 +17,24 @@ import uuid
 
 from app.agent import Planner, PlannerError
 from app.agents import AGENT_REGISTRY
+from app.casework.agents import email_due, has_decision
 from app.controls import gate
 from app.monitoring.audit import log_event as _audit_event
 
 MAX_STEPS = 8
 MAX_TASK_CHARS = 300
+
+# what every case needs whatever the planner said: (purpose, agent, task, still needed?).
+# checked in this order after the plan runs, and each one runs at most once, so nothing can loop
+REQUIRED_STEPS = (
+    ('intake', 'intake', 'Register the case and put it in the queue.', lambda c: not c.get('queued')),
+    ('acknowledgement_email', 'email', 'Email the customer that we got the request.',
+     lambda c: email_due(c) == 'acknowledgement'),
+    # before the decision email and reporting, since both need the decision it makes
+    ('refunds', 'refunds', 'Request the refund decision.', lambda c: c.get('decision') is None),
+    ('decision_email', 'email', 'Email the customer the decision.', lambda c: email_due(c) == 'decision'),
+    ('reporting', 'reporting', 'Record the outcome.', lambda c: has_decision(c) and not c.get('reported')),
+)
 
 HALTED_MESSAGE = 'The agent has been stopped by an administrator.'
 FAILED_MESSAGE = 'We could not process your request right now.'
@@ -112,27 +125,49 @@ class Orchestrator:
         case['plan'] = steps
         log_event('plan_accepted', case_id=case_id, step_count=len(steps))
 
-        # check again before every step so a revoke mid-case stops the rest
         for i, step in enumerate(steps, 1):
-            if not self._authority_ok(case_id, f'before_step_{i}'):
+            if not self._run_step(case_id, case, i, step):
                 return self._finish(case_id, 'halted', HALTED_MESSAGE)
-            log_event('step_start', case_id=case_id, step=i, agent=step['agent'], task=step['task'])
-            agent_fn = AGENT_REGISTRY[step['agent']]
-            try:
-                result = agent_fn(case_id, step['task'], case)
-            except Exception as e:  # one broken agent shouldn't take down the whole request
-                result = {'status': 'error', 'output': f'{type(e).__name__}'}
-            case['results'].append({'step': i, **step, 'result': result})
-            log_event('step_done', case_id=case_id, step=i, agent=step['agent'], status=result.get('status'))
+
+        # the planner is an LLM, so it can skip things. fill in whatever the case still needs
+        for purpose, agent, task, needed in REQUIRED_STEPS:
+            if not needed(case):
+                continue
+            log_event('required_step_added', case_id=case_id, agent=agent, purpose=purpose)
+            if not self._run_step(case_id, case, len(case['results']) + 1, {'agent': agent, 'task': task}):
+                return self._finish(case_id, 'halted', HALTED_MESSAGE)
 
         failed = [r for r in case['results'] if r['result'].get('status') != 'ok']
         if failed:
             return self._finish(case_id, 'error', 'Part of your request could not be processed.')
         return self._finish(case_id, 'completed', 'Your request was processed.')
 
+    def _run_step(self, case_id: str, case: dict, i: int, step: dict) -> bool:
+        """runs one step. False means the kill switch is on and the case has to stop here."""
+        # checked before every step so a revoke mid-case stops the rest
+        if not self._authority_ok(case_id, f'before_step_{i}'):
+            return False
+        log_event('step_start', case_id=case_id, step=i, agent=step['agent'], task=step['task'])
+        agent_fn = AGENT_REGISTRY[step['agent']]
+        try:
+            result = agent_fn(case_id, step['task'], case)
+        except Exception as e:  # one broken agent shouldn't take down the whole request
+            result = {'status': 'error', 'output': f'{type(e).__name__}'}
+        case['results'].append({'step': i, **step, 'result': result})
+        log_event('step_done', case_id=case_id, step=i, agent=step['agent'], status=result.get('status'))
+        return True
+
     def _finish(self, case_id: str, status: str, message: str) -> dict:
         case = self.memory[case_id]
         decision = case.get('decision')
+        # every decision gets a record, even when the steps never got there (ownership denial, halted, failed plan).
+        # the reporting agent still checks the kill switch itself
+        if has_decision(case) and not case.get('reported'):
+            log_event('required_step_added', case_id=case_id, agent='reporting', purpose='reporting', at='finish')
+            try:
+                AGENT_REGISTRY['reporting'](case_id, 'Record the outcome.', case)
+            except Exception as e:
+                log_event('reporting_failed', case_id=case_id, error=type(e).__name__)
         body = {'case_id': case_id, 'status': status, 'message': message,
                 # customers see the agent and its output, not the raw record each agent read
                 'steps': [{'step': r['step'], 'agent': r['agent'], 'task': r['task'],

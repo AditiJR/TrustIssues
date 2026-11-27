@@ -36,7 +36,7 @@ def test_steps_and_the_limit_control_decision_are_returned_together(env):
     client, planner, _, _ = env
     body = client.post('/api/refund-requests', json=form()).json()
     assert body['outcome'] == 'approved' and body['reference'].startswith('D-')
-    assert [s['agent'] for s in body['steps']] == ['intake', 'records', 'refunds']
+    assert [s['agent'] for s in body['steps']] == ['intake', 'records', 'refunds', 'email', 'email', 'reporting']
     assert all(s['result']['status'] == 'ok' for s in body['steps'])
     assert len(planner.calls) == 1
 

@@ -62,7 +62,8 @@ class HttpControls(unittest.TestCase):
         self.assertEqual(body['outcome'], 'approved')
         # the decision's public view (outcome, message, reference) plus the orchestrator's case id, status and steps
         self.assertEqual(sorted(body), ['case_id', 'message', 'outcome', 'reference', 'status', 'steps'])
-        self.assertEqual([s['agent'] for s in body['steps']], ['intake', 'records', 'refunds'])
+        self.assertEqual([s['agent'] for s in body['steps']],
+                         ['intake', 'records', 'refunds', 'email', 'email', 'reporting'])
         self.assertNotIn('record', body['steps'][1]['result'])     # the raw record the agent read is not returned
 
     def test_over_100_escalates_and_request_fields_cannot_grant_authority(self):

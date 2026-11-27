@@ -1,20 +1,13 @@
-"""the five specialized agents. intake, email and reporting are still stubs.
+"""the five specialized agents. intake, email and reporting live in app/casework/agents.py.
 
 records is Vaishnavi's agent (app/records_agent.py), reading through Blake's case-scoped gateway.
 refunds asks Blake's limit control for the decision. it never moves money or sets a limit itself.
 each one only gets its own case, the orchestrator never hands over other customers' records.
 """
 
+from app.casework.agents import email_agent, intake_agent, reporting_agent
 from app.controls import gate
 from app.records_agent import records_agent
-
-
-def intake_agent(case_id: str, task: str, case: dict) -> dict:
-    return {'status': 'ok', 'output': f'[STUB] Case {case_id} registered and queued.'}
-
-
-def email_agent(case_id: str, task: str, case: dict) -> dict:
-    return {'status': 'ok', 'output': '[STUB] Email drafted, not sent.'}
 
 
 def refunds_agent(case_id: str, task: str, case: dict) -> dict:
@@ -31,10 +24,6 @@ def refunds_agent(case_id: str, task: str, case: dict) -> dict:
     if decision.get('reason') == gate.UNAVAILABLE:
         return {'status': 'error', 'output': 'The decision could not be recorded.'}
     return {'status': 'ok', 'output': f"Decision: {decision['outcome']} (reference {decision['decision_id']})."}
-
-
-def reporting_agent(case_id: str, task: str, case: dict) -> dict:
-    return {'status': 'ok', 'output': '[STUB] Report entry recorded (placeholder).'}
 
 
 # the allowlist. if an agent isn't in here, the orchestrator won't run it
